@@ -37,6 +37,7 @@ import (
 type Config struct {
 	MountnsMap  *ebpf.Map
 	ShowThreads bool
+	GetLanguage bool
 }
 
 var hostRoot string
@@ -147,6 +148,11 @@ func runeBPFCollector(config *Config, enricher gadgets.DataEnricherByMntNs) ([]*
 			enricher.EnrichByMntNs(&event.CommonData, event.MountNsID)
 		}
 
+		if config.GetLanguage {
+			language, _ := gadgets.GetProcessLanguage(event.Pid)
+			event.Language = language
+		}
+
 		events = append(events, &event)
 	}
 
@@ -210,6 +216,11 @@ func getPidEvents(config *Config, enricher gadgets.DataEnricherByMntNs, pid int)
 		event, err := getTidEvent(config, enricher, pid, tid)
 		if err != nil {
 			continue
+		}
+
+		if config.GetLanguage {
+			language, _ := gadgets.GetProcessLanguage(event.Pid)
+			event.Language = language
 		}
 
 		events = append(events, event)

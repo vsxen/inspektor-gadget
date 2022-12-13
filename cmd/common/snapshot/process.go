@@ -26,6 +26,7 @@ import (
 type ProcessFlags struct {
 	ShowThreads    bool
 	showParentsPID bool
+	GetLanguage    bool
 }
 
 type ProcessParser struct {
@@ -43,6 +44,18 @@ func newProcessParser(outputConfig *commonutils.OutputConfig, flags *ProcessFlag
 
 	if flags.showParentsPID {
 		col, _ := cols.GetColumn("ppid")
+		col.Visible = true
+	}
+
+	for _, col := range outputConfig.CustomColumns {
+		if col == "language" {
+			flags.GetLanguage = true
+			break
+		}
+	}
+
+	if flags.GetLanguage {
+		col, _ := cols.GetColumn("language")
 		col.Visible = true
 	}
 
@@ -95,6 +108,14 @@ func NewProcessCmd(runCmd func(*cobra.Command, []string) error, flags *ProcessFl
 		"",
 		false,
 		"Show parents PID",
+	)
+
+	cmd.PersistentFlags().BoolVarP(
+		&flags.GetLanguage,
+		"get-language",
+		"",
+		false,
+		"Get programming language of the process",
 	)
 
 	return cmd

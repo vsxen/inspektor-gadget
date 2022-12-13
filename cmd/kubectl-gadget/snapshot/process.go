@@ -37,6 +37,7 @@ func newProcessCmd() *cobra.Command {
 
 		params := make(map[string]string)
 		params[types.ShowThreadsParam] = strconv.FormatBool(flags.ShowThreads)
+		params[types.GetLanguageParam] = strconv.FormatBool(flags.GetLanguage)
 
 		processGadget := &SnapshotGadget[types.Event]{
 			name:        "process-collector",

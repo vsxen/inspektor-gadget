@@ -21,6 +21,7 @@ import (
 
 const (
 	ShowThreadsParam = "show-threads"
+	GetLanguageParam = "get-language"
 )
 
 type Event struct {
@@ -31,6 +32,7 @@ type Event struct {
 	Tid       int    `json:"tid" column:"tid,template:pid,hide"`
 	ParentPid int    `json:"ppid" column:"ppid,template:pid,hide"`
 	MountNsID uint64 `json:"mntns" column:"mntns,template:ns"`
+	Language  string `json:"language" column:"language,hide"`
 }
 
 func GetColumns() *columns.Columns[Event] {

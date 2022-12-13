@@ -75,6 +75,7 @@ func (t *Trace) Collect(trace *gadgetv1alpha1.Trace) {
 	}
 
 	showThreads := false
+	getLanguage := false
 
 	params := trace.Spec.Parameters
 	if params != nil {
@@ -86,10 +87,20 @@ func (t *Trace) Collect(trace *gadgetv1alpha1.Trace) {
 				return
 			}
 		}
+
+		if val, ok := params[types.GetLanguageParam]; ok {
+			var err error
+			getLanguage, err = strconv.ParseBool(val)
+			if err != nil {
+				trace.Status.OperationError = fmt.Sprintf("%q is not valid for %s: %v", val, types.GetLanguageParam, err)
+				return
+			}
+		}
 	}
 	config := &tracer.Config{
 		MountnsMap:  mountNsMap,
 		ShowThreads: showThreads,
+		GetLanguage: getLanguage,
 	}
 	events, err := tracer.RunCollector(config, t.helpers)
 	if err != nil {

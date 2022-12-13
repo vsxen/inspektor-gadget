@@ -34,18 +34,22 @@ import (
 type collectorFunc func(config *Config, enricher gadgets.DataEnricherByMntNs) ([]*snapshotProcessTypes.Event, error)
 
 func BenchmarkSnapshotProcessEBPFTracer(b *testing.B) {
-	benchmarkTracer(b, runeBPFCollector)
+	benchmarkTracer(b, &Config{}, runeBPFCollector)
 }
 
 func BenchmarkSnapshotProcessProcfsTracer(b *testing.B) {
-	benchmarkTracer(b, runProcfsCollector)
+	benchmarkTracer(b, &Config{}, runProcfsCollector)
 }
 
-func benchmarkTracer(b *testing.B, runCollector collectorFunc) {
+func BenchmarkEBPFTracerGetLanguages(b *testing.B) {
+	benchmarkTracer(b, &Config{GetLanguage: true}, runeBPFCollector)
+}
+
+func benchmarkTracer(b *testing.B, c *Config, runCollector collectorFunc) {
 	utilstest.RequireRoot(b)
 
 	for n := 0; n < b.N; n++ {
-		_, err := runCollector(&Config{}, nil)
+		_, err := runCollector(c, nil)
 		if err != nil {
 			b.Fatalf("benchmarking collector: %s", err)
 		}

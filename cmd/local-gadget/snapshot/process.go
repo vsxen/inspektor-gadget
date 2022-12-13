@@ -51,6 +51,7 @@ func newProcessCmd() *cobra.Command {
 				config := &processTracer.Config{
 					MountnsMap:  mountnsmap,
 					ShowThreads: flags.ShowThreads,
+					GetLanguage: flags.GetLanguage,
 				}
 				return processTracer.RunCollector(config, &localGadgetManager.ContainerCollection)
 			},
