@@ -44,6 +44,28 @@ func NewTracer() (*Tracer, error) {
 		return nil, fmt.Errorf("failed to load asset: %w", err)
 	}
 
+	latencyCalc := newDNSLatencyCalculator()
+	parseAndEnrichDNSEvent := func(rawSample []byte) (*types.Event, error) {
+		bpfEvent := (*dnsEventT)(unsafe.Pointer(&rawSample[0]))
+		if len(rawSample) < int(unsafe.Sizeof(*bpfEvent)) {
+			return nil, errors.New("invalid sample size")
+		}
+
+		event, err := bpfEventToDNSEvent(bpfEvent)
+		if err != nil {
+			return nil, err
+		}
+
+		// Derive latency from the request/response timestamps.
+		if bpfEvent.Qr == 0 {
+			latencyCalc.storeDNSRequestTimestamp(bpfEvent.SaddrV6, bpfEvent.Id, bpfEvent.Timestamp)
+		} else {
+			event.Latency = latencyCalc.calculateDNSResponseLatency(bpfEvent.DaddrV6, bpfEvent.Id, bpfEvent.Timestamp)
+		}
+
+		return event, nil
+	}
+
 	return &Tracer{
 		Tracer: networktracer.NewTracer(
 			spec,
@@ -51,7 +73,7 @@ func NewTracer() (*Tracer, error) {
 			BPFPerfMapName,
 			BPFSocketAttach,
 			types.Base,
-			parseDNSEvent,
+			parseAndEnrichDNSEvent,
 		),
 	}, nil
 }
@@ -195,16 +217,11 @@ func parseLabelSequence(sample []byte) (ret string) {
 	return ret
 }
 
-func parseDNSEvent(rawSample []byte) (*types.Event, error) {
+func bpfEventToDNSEvent(bpfEvent *dnsEventT) (*types.Event, error) {
 	event := types.Event{
 		Event: eventtypes.Event{
 			Type: eventtypes.NORMAL,
 		},
-	}
-
-	bpfEvent := (*dnsEventT)(unsafe.Pointer(&rawSample[0]))
-	if len(rawSample) < int(unsafe.Sizeof(*bpfEvent)) {
-		return nil, errors.New("invalid sample size")
 	}
 
 	event.ID = fmt.Sprintf("%.4x", bpfEvent.Id)
@@ -226,7 +243,7 @@ func parseDNSEvent(rawSample []byte) (*types.Event, error) {
 	}
 
 	// Convert name into a string with dots
-	event.DNSName = parseLabelSequence(rawSample[unsafe.Offsetof(bpfEvent.Name):])
+	event.DNSName = parseLabelSequence(bpfEvent.Name[:])
 
 	// Parse the packet type
 	event.PktType = "UNKNOWN"

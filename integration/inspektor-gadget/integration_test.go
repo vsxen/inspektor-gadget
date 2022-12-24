@@ -539,6 +539,7 @@ func TestDns(t *testing.T) {
 					DNSName:    "inspektor-gadget.io.",
 					QType:      "A",
 					Rcode:      "NoError",
+					Latency:    1,
 				},
 				{
 					Event:      BuildBaseEvent(ns),
@@ -558,6 +559,7 @@ func TestDns(t *testing.T) {
 					DNSName:    "inspektor-gadget.io.",
 					QType:      "AAAA",
 					Rcode:      "NoError",
+					Latency:    1,
 				},
 			}
 
@@ -569,6 +571,9 @@ func TestDns(t *testing.T) {
 			normalize := func(e *dnsTypes.Event) {
 				e.Node = ""
 				e.ID = "0000"
+				if e.Latency > 0 {
+					e.Latency = 1
+				}
 			}
 
 			return ExpectEntriesToMatch(output, normalize, expectedEntries...)

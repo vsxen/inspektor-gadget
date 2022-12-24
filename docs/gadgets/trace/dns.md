@@ -36,13 +36,13 @@ $ kubectl -n demo run mypod -it --image=wbitt/network-multitool -- /bin/sh
 The requests will be logged by the DNS gadget:
 
 ```bash
-NODE                 NAMESPACE            POD                  QR NAMESERVER      TYPE      QTYPE       NAME                RCODE
-minikube             demo                 mypod                Q  8.8.4.4         OUTGOING  A           inspektor-gadget.i…
-minikube             demo                 mypod                R  8.8.4.4         HOST      A           inspektor-gadget.i… NoError
-minikube             demo                 mypod                Q  8.8.4.4         OUTGOING  AAAA        inspektor-gadget.i…
-minikube             demo                 mypod                R  8.8.4.4         HOST      AAAA        inspektor-gadget.i… NoError
-minikube             demo                 mypod                Q  8.8.4.4         OUTGOING  MX          inspektor-gadget.i…
-minikube             demo                 mypod                R  8.8.4.4         HOST      MX          inspektor-gadget.i… NoError
+NODE        NAMESPACE     POD      QR NAMESERVER    TYPE      QTYPE      NAME                    RCODE        LATENCY
+minikube    demo          mypod    Q  8.8.4.4       OUTGOING  A          inspektor-gadget.io.
+minikube    demo          mypod    R  8.8.4.4       HOST      A          inspektor-gadget.io.    NoError      11.894421ms
+minikube    demo          mypod    Q  8.8.4.4       OUTGOING  AAAA       inspektor-gadget.io.
+minikube    demo          mypod    R  8.8.4.4       HOST      AAAA       inspektor-gadget.io.    NoError      15.464379ms
+minikube    demo          mypod    Q  8.8.4.4       OUTGOING  MX         inspektor-gadget.io.
+minikube    demo          mypod    R  8.8.4.4       HOST      MX         inspektor-gadget.io.    NoError      15.469019ms
 ```
 
 Delete the demo test namespace:

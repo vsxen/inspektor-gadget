@@ -303,6 +303,7 @@ func TestDNS(t *testing.T) {
 	// normalize
 	id := event.ID
 	event.ID = "0000"
+	event.Latency = 0
 
 	if event != expectedEvent {
 		t.Fatalf("Received: %v, Expected: %v", event, expectedEvent)
@@ -323,6 +324,7 @@ func TestDNS(t *testing.T) {
 		t.Fatalf("Response ID: %v, Expected: %v", event.ID, id)
 	}
 	event.ID = "0000"
+	event.Latency = 0
 
 	if event != expectedEvent {
 		t.Fatalf("Received: %v, Expected: %v", event, expectedEvent)
