@@ -19,13 +19,6 @@ import (
 	"time"
 )
 
-func assertNumOutstandingRequests(t *testing.T, c *dnsLatencyCalculator, expected int) {
-	n := c.numOutstandingRequests()
-	if n != expected {
-		t.Fatalf("Expected %d outstanding requests, but got %d", expected, n)
-	}
-}
-
 func assertLatency(t *testing.T, actual time.Duration, expected time.Duration) {
 	if actual != expected {
 		t.Fatalf("Expected latency %d but got %d", expected, actual)
@@ -44,11 +37,9 @@ func TestDnsLatencyCalculatorRequestResponse(t *testing.T) {
 	c := newDNSLatencyCalculator()
 
 	c.storeDNSRequestTimestamp(addr, id, 100)
-	assertNumOutstandingRequests(t, c, 1)
 
 	latency := c.calculateDNSResponseLatency(addr, id, 500)
 	assertLatency(t, latency, 400*time.Nanosecond)
-	assertNumOutstandingRequests(t, c, 0)
 }
 
 func TestDnsLatencyCalculatorResponseWithoutMatchingRequest(t *testing.T) {
@@ -59,7 +50,6 @@ func TestDnsLatencyCalculatorResponseWithoutMatchingRequest(t *testing.T) {
 	// Response for an addr/id without a corresponding request.
 	latency := c.calculateDNSResponseLatency(addr, id, 500)
 	assertNoLatency(t, latency)
-	assertNumOutstandingRequests(t, c, 0)
 }
 
 func TestDnsLatencyCalculatorResponseWithSameIdButDifferentSrcIP(t *testing.T) {
@@ -70,14 +60,12 @@ func TestDnsLatencyCalculatorResponseWithSameIdButDifferentSrcIP(t *testing.T) {
 	// Two requests, same ID, different IPs
 	c.storeDNSRequestTimestamp(firstAddr, id, 100)
 	c.storeDNSRequestTimestamp(secondAddr, id, 200)
-	assertNumOutstandingRequests(t, c, 2)
 
 	// Latency calculated correctly for both responses.
 	firstLatency := c.calculateDNSResponseLatency(firstAddr, id, 500)
 	assertLatency(t, firstLatency, 400*time.Nanosecond)
 	secondLatency := c.calculateDNSResponseLatency(secondAddr, id, 700)
 	assertLatency(t, secondLatency, 500*time.Nanosecond)
-	assertNumOutstandingRequests(t, c, 0)
 }
 
 func TestDnsLatencyCalculatorManyOutstandingRequests(t *testing.T) {
@@ -90,9 +78,6 @@ func TestDnsLatencyCalculatorManyOutstandingRequests(t *testing.T) {
 		c.storeDNSRequestTimestamp(addr, id, 100)
 		lastID = id
 	}
-
-	// Dropped some of the outstanding requests.
-	assertNumOutstandingRequests(t, c, dnsLatencyMaxMapSize*2)
 
 	// Response to most recent request should report latency.
 	latency := c.calculateDNSResponseLatency(addr, lastID, 300)
@@ -113,10 +98,8 @@ func TestDnsLatencyCalculatorResponseWithZeroTimestamp(t *testing.T) {
 	c := newDNSLatencyCalculator()
 
 	c.storeDNSRequestTimestamp(addr, id, 100)
-	assertNumOutstandingRequests(t, c, 1)
 
 	// Response has timestamp zero (should never happen, but check it anyway to prevent overflow).
 	latency := c.calculateDNSResponseLatency(addr, id, 0)
 	assertNoLatency(t, latency)
-	assertNumOutstandingRequests(t, c, 0)
 }

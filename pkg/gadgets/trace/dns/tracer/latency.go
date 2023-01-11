@@ -15,73 +15,52 @@
 package tracer
 
 import (
-	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const (
-	dnsLatencyMaxMapSize      int    = 1024
-	dnsReqTSMapRotateInterval uint64 = 5_000_000_000 // 5e+9 ns = 5 seconds
+	dnsLatencyMaxMapSize int = 1024
 )
-
-// dnsReqKey is a unique identifier for a DNS request.
-// The address is the request's source IP address (equals destination address of the response).
-// The ID comes from the DNS header.
-type dnsReqKey struct {
-	addr [16]uint8 // Either IPv4 or IPv6.
-	id   uint16
-}
 
 // dnsLatencyCalculator calculates the latency between a request and its response.
 // It tracks up to dnsLatencyMaxMapSize*2 outstanding requests; if more arrive, older ones will be dropped to make space.
 // All operations are thread-safe.
 type dnsLatencyCalculator struct {
-	sync.Mutex      // Protects currentReqTSMap and prevReqTSMap.
-	currentReqTSMap map[dnsReqKey]uint64
-	prevReqTSMap    map[dnsReqKey]uint64
+	db *dnsQueriesDataBase
 }
 
 func newDNSLatencyCalculator() *dnsLatencyCalculator {
+	db, err := NewDNSQueriesDataBase(dnsLatencyMaxMapSize*2, 2)
+	if err != nil {
+		panic("TODO: Manage this, return an error?")
+	}
+
 	return &dnsLatencyCalculator{
-		currentReqTSMap: make(map[dnsReqKey]uint64),
-		prevReqTSMap:    make(map[dnsReqKey]uint64),
+		db: db,
 	}
 }
 
 func (c *dnsLatencyCalculator) storeDNSRequestTimestamp(saddr [16]uint8, id uint16, timestamp uint64) {
-	c.Lock()
-	defer c.Unlock()
-
-	// If the current map is full, drop the previous map and allocate a new one to make space.
-	if len(c.currentReqTSMap) == dnsLatencyMaxMapSize {
-		c.prevReqTSMap = c.currentReqTSMap
-		c.currentReqTSMap = make(map[dnsReqKey]uint64)
+	// Store the timestamp of the request so we can calculate the latency once
+	// the response arrives.
+	err := c.db.Store(dnsQueryKey{saddr, id}, timestamp)
+	if err != nil {
+		// Should never happen!
+		panic("TODO: What to do here?")
 	}
-
-	// Store the timestamp of the request so we can calculate the latency once the response arrives.
-	key := dnsReqKey{saddr, id}
-	c.currentReqTSMap[key] = timestamp
 }
 
 // If there is no corresponding DNS request (either never received or evicted to make space), then this returns zero.
 func (c *dnsLatencyCalculator) calculateDNSResponseLatency(daddr [16]uint8, id uint16, timestamp uint64) time.Duration {
-	c.Lock()
-	defer c.Unlock()
-
 	// Lookup the request timestamp so we can subtract it from the response timestamp.
-	key := dnsReqKey{daddr, id}
-	reqTS, ok := c.currentReqTSMap[key]
-	if ok {
-		// Found the request in the current map, so delete the entry to free space.
-		delete(c.currentReqTSMap, key)
-	} else {
-		reqTS, ok = c.prevReqTSMap[key]
-		if ok {
-			delete(c.prevReqTSMap, key)
-		} else {
-			// Either an invalid ID or we evicted the request from the map to free space.
-			return 0
-		}
+	reqTS, err := c.db.LoadAndDelete(dnsQueryKey{daddr, id})
+	if err != nil {
+		// Either an invalid ID or we evicted the request from the map to free
+		// space.
+		log.Errorf("Failed to calculate DNS latency: %v", err)
+		return 0
 	}
 
 	if reqTS > timestamp {
@@ -90,11 +69,4 @@ func (c *dnsLatencyCalculator) calculateDNSResponseLatency(daddr [16]uint8, id u
 	}
 
 	return time.Duration(timestamp - reqTS)
-}
-
-func (c *dnsLatencyCalculator) numOutstandingRequests() int {
-	c.Lock()
-	defer c.Unlock()
-
-	return len(c.currentReqTSMap) + len(c.prevReqTSMap)
 }
