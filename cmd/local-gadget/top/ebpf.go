@@ -15,7 +15,6 @@
 package top
 
 import (
-	"os"
 	"time"
 
 	"github.com/cilium/ebpf"
@@ -24,8 +23,8 @@ import (
 	commontop "github.com/inspektor-gadget/inspektor-gadget/cmd/common/top"
 	commonutils "github.com/inspektor-gadget/inspektor-gadget/cmd/common/utils"
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/local-gadget/utils"
+	containercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/container-collection"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-collection/gadgets/trace"
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/top"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/top/ebpf/tracer"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/top/ebpf/types"
@@ -38,11 +37,6 @@ func newEbpfCmd() *cobra.Command {
 	cols := types.GetColumns()
 
 	cmd := commontop.NewEbpfCmd(func(cmd *cobra.Command, args []string) error {
-		hostname, err := os.Hostname()
-		if err != nil {
-			return err
-		}
-
 		parser, err := commonutils.NewGadgetParserWithRuntimeInfo(&commonFlags.OutputConfig, cols)
 		if err != nil {
 			return commonutils.WrapInErrParserCreate(err)
@@ -56,14 +50,14 @@ func newEbpfCmd() *cobra.Command {
 				ColMap:         cols.ColumnMap,
 			},
 			commonFlags: &commonFlags,
-			createAndRunTracer: func(mountNsMap *ebpf.Map, enricher gadgets.DataEnricherByMntNs, eventCallback func(*top.Event[types.Stats])) (trace.Tracer, error) {
+			createAndRunTracer: func(mountNsMap *ebpf.Map, cc *containercollection.ContainerCollection, eventCallback func(*top.Event[types.Stats])) (trace.Tracer, error) {
 				config := &tracer.Config{
 					MaxRows:  flags.MaxRows,
 					Interval: time.Second * time.Duration(flags.OutputInterval),
 					SortBy:   flags.ParsedSortBy,
 				}
 
-				return tracer.NewTracer(config, eventCallback, hostname)
+				return tracer.NewTracer(config, cc, eventCallback)
 			},
 		}
 
