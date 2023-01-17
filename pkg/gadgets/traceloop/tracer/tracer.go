@@ -1,7 +1,4 @@
-//go:build linux
-// +build linux
-
-// Copyright 2019-2022 The Inspektor Gadget authors
+// Copyright 2019-2023 The Inspektor Gadget authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+//go:build !withoutebpf
 
 package tracer
 
@@ -29,11 +28,13 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
+	libseccomp "github.com/seccomp/libseccomp-golang"
+	log "github.com/sirupsen/logrus"
+
+	containercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/container-collection"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/traceloop/types"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
-	libseccomp "github.com/seccomp/libseccomp-golang"
-	log "github.com/sirupsen/logrus"
 )
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type syscall_event_t -type syscall_event_cont_t -target ${TARGET} -cc clang traceloop ./bpf/traceloop.bpf.c -- -I./bpf/ -I../../../${TARGET}
@@ -76,6 +77,8 @@ type Tracer struct {
 	// Same comment than above, this map is designed to handle parallel access.
 	// The keys of this map are containerID.
 	readers sync.Map
+
+	gadgetCtx gadgets.GadgetContext
 }
 
 type syscallEvent struct {
@@ -102,10 +105,17 @@ func NewTracer(enricher gadgets.DataEnricherByMntNs) (*Tracer, error) {
 	t := &Tracer{
 		enricher: enricher,
 	}
+	err := t.init()
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
+}
 
+func (t *Tracer) init() error {
 	spec, err := loadTraceloop()
 	if err != nil {
-		return nil, fmt.Errorf("loading ebpf program: %w", err)
+		return fmt.Errorf("loading ebpf program: %w", err)
 	}
 
 	gadgets.FixBpfKtimeGetBootNs(spec.Programs)
@@ -114,7 +124,7 @@ func NewTracer(enricher gadgets.DataEnricherByMntNs) (*Tracer, error) {
 		syscallsDeclarations, err = gatherSyscallsDeclarations()
 	})
 	if err != nil {
-		return nil, fmt.Errorf("gathering syscall definitions: %w", err)
+		return fmt.Errorf("gathering syscall definitions: %w", err)
 	}
 
 	// Fill the syscall map with specific syscall signatures.
@@ -122,7 +132,7 @@ func NewTracer(enricher gadgets.DataEnricherByMntNs) (*Tracer, error) {
 	for name, def := range syscallDefs {
 		nr, err := libseccomp.GetSyscallFromName(name)
 		if err != nil {
-			return nil, fmt.Errorf("getting syscall number of %q: %w", name, err)
+			return fmt.Errorf("getting syscall number of %q: %w", name, err)
 		}
 
 		// We need to do so to avoid taking each time the same address.
@@ -134,7 +144,7 @@ func NewTracer(enricher gadgets.DataEnricherByMntNs) (*Tracer, error) {
 	}
 
 	if err := spec.LoadAndAssign(&t.objs, nil); err != nil {
-		return nil, fmt.Errorf("loading ebpf program: %w", err)
+		return fmt.Errorf("loading ebpf program: %w", err)
 	}
 
 	defer func() {
@@ -149,7 +159,7 @@ func NewTracer(enricher gadgets.DataEnricherByMntNs) (*Tracer, error) {
 		Program: t.objs.IgTraceloopE,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("opening enter tracepoint: %w", err)
+		return fmt.Errorf("opening enter tracepoint: %w", err)
 	}
 
 	t.exitLink, err = link.AttachRawTracepoint(link.RawTracepointOptions{
@@ -157,12 +167,12 @@ func NewTracer(enricher gadgets.DataEnricherByMntNs) (*Tracer, error) {
 		Program: t.objs.IgTraceloopX,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("opening exit tracepoint: %w", err)
+		return fmt.Errorf("opening exit tracepoint: %w", err)
 	}
 
 	t.innerMapSpec = spec.Maps["map_of_perf_buffers"].InnerMap
 
-	return t, nil
+	return nil
 }
 
 func (t *Tracer) Stop() {
@@ -549,4 +559,43 @@ func (t *Tracer) Delete(containerID string) error {
 	reader.perfReader = nil
 
 	return err
+}
+
+// --- Registry changes
+
+func (t *Tracer) Start() error {
+	return nil
+}
+
+func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
+	return &Tracer{}, nil
+}
+
+func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
+	t.gadgetCtx = gadgetCtx
+	return t.init()
+}
+
+func (t *Tracer) AttachContainer(container *containercollection.Container) error {
+	err := t.Attach(container.ID, container.Mntns)
+	if err != nil {
+		return err
+	}
+	go func() {
+		for {
+			evs, err := t.Read(container.ID)
+			if err != nil {
+				t.gadgetCtx.Logger().Debugf("error reading from container %s: %v", container.ID, err)
+				return
+			}
+			for _, ev := range evs {
+				ev.SetContainerInfo(container.Podname, container.Namespace, container.Name)
+			}
+		}
+	}()
+	return nil
+}
+
+func (t *Tracer) DetachContainer(container *containercollection.Container) error {
+	return t.Detach(container.Mntns)
 }

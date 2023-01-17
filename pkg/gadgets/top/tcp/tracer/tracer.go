@@ -1,10 +1,7 @@
-//go:build linux
-// +build linux
-
-// Copyright 2019-2021 The Inspektor Gadget authors
+// Copyright 2023 The Inspektor Gadget authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this bio except in compliance with the License.
+// you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
@@ -14,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+//go:build !withoutebpf
 
 package tracer
 
@@ -53,6 +52,7 @@ type Tracer struct {
 	eventCallback      func(*top.Event[types.Stats])
 	done               chan bool
 	colMap             columns.ColumnMap[types.Stats]
+	gadgetCtx          gadgets.GadgetContext
 }
 
 func NewTracer(config *Config, enricher gadgets.DataEnricherByMntNs,
@@ -242,4 +242,61 @@ func (t *Tracer) run() {
 			}
 		}
 	}()
+}
+
+func (t *Tracer) Start() error {
+	if err := t.start(); err != nil {
+		t.Stop()
+		return err
+	}
+
+	statCols, err := columns.NewColumns[types.Stats]()
+	if err != nil {
+		t.Stop()
+		return err
+	}
+	t.colMap = statCols.GetColumnMap()
+
+	return nil
+}
+
+func (t *Tracer) SetEventHandlerArray(handler any) {
+	nh, ok := handler.(func(ev []*types.Stats))
+	if !ok {
+		panic("event handler invalid")
+	}
+
+	t.eventCallback = func(ev *top.Event[types.Stats]) {
+		if ev.Error != "" {
+			t.gadgetCtx.Logger().Errorf("event error: %s", ev.Error)
+			return
+		}
+		nh(ev.Stats)
+	}
+}
+
+func (t *Tracer) SetMountNsMap(mntnsMap *ebpf.Map) {
+	t.config.MountnsMap = mntnsMap
+}
+
+func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
+	tracer := &Tracer{
+		config: &Config{
+			TargetFamily: -1,
+			TargetPid:    -1,
+		},
+		done: make(chan bool),
+	}
+	return tracer, nil
+}
+
+func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
+	params := gadgetCtx.GadgetParams()
+	t.gadgetCtx = gadgetCtx
+	t.config.MaxRows = params.Get(gadgets.ParamMaxRows).AsInt()
+	t.config.SortBy = params.Get(gadgets.ParamSortBy).AsStringSlice()
+	t.config.Interval = time.Second * time.Duration(params.Get(gadgets.ParamInterval).AsInt())
+	t.config.TargetFamily, _ = types.ParseFilterByFamily(params.Get(types.FamilyParam).AsString())
+	t.config.TargetPid = params.Get(types.PidParam).AsInt32()
+	return nil
 }

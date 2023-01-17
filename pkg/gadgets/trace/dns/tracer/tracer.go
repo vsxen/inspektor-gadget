@@ -1,4 +1,4 @@
-// Copyright 2019-2022 The Inspektor Gadget authors
+// Copyright 2019-2023 The Inspektor Gadget authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build !withoutebpf
+
 package tracer
 
 import (
@@ -20,11 +22,12 @@ import (
 	"syscall"
 	"unsafe"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/internal/networktracer"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/trace/dns/types"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
-	"golang.org/x/sys/unix"
 )
 
 //go:generate bash -c "source ./clangosflags.sh; go run github.com/cilium/ebpf/cmd/bpf2go -target bpfel -cc clang -type event_t dns ./bpf/dns.c -- $CLANG_OS_FLAGS -I./bpf/ -I../../../internal/socketenricher/bpf"
@@ -284,4 +287,20 @@ func bpfEventToDNSEvent(bpfEvent *dnsEventT) (*types.Event, error) {
 	}
 
 	return &event, nil
+}
+
+// --- Registry changes
+
+func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
+	return &Tracer{}, nil
+}
+
+func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
+	// TODO: Clean up
+	tracer, err := NewTracer()
+	if err != nil {
+		return err
+	}
+	t.Tracer = tracer.Tracer
+	return nil
 }

@@ -1,4 +1,4 @@
-// Copyright 2019-2022 The Inspektor Gadget authors
+// Copyright 2019-2023 The Inspektor Gadget authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+//go:build !withoutebpf
 
 package tracer
 
@@ -26,6 +28,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
+	containercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/container-collection"
 	containerutils "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/trace/network/types"
@@ -68,6 +71,11 @@ type Tracer struct {
 	// containers.
 	sync.Mutex
 	cache []*types.Event
+
+	eventCallback func(ev *types.Event)
+	gadgetCtx     gadgets.GadgetContext
+	cbmap         map[uint64]func(ev *types.Event)
+	cbmapMutex    sync.RWMutex
 }
 
 func NewTracer(enricher gadgets.DataEnricherByNetNs) (_ *Tracer, err error) {
@@ -195,6 +203,9 @@ func protoString(proto int) string {
 }
 
 func (t *Tracer) Pop() (events []*types.Event, err error) {
+	t.cbmapMutex.Lock()
+	defer t.cbmapMutex.Unlock()
+
 	defer func() {
 		if err != nil {
 			return
@@ -229,6 +240,8 @@ func (t *Tracer) Pop() (events []*types.Event, err error) {
 
 		if t.enricher != nil {
 			t.enricher.EnrichByNetNs(&e.CommonData, key.ContainerNetns)
+		} else {
+			t.cbmap[key.ContainerNetns](e)
 		}
 		return e
 	}
@@ -332,4 +345,72 @@ func (t *Tracer) Close() {
 		t.releaseAttachment(key, l)
 	}
 	t.networkGraphMapObjects.Close()
+}
+
+// --- Registry changes
+// TODO: This can be optimized a lot after using NewInstance() for everything
+
+func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
+	tracer := &Tracer{
+		attachments: make(map[uint64]*attachment),
+		cbmap:       make(map[uint64]func(ev *types.Event)),
+	}
+	return tracer, nil
+}
+
+func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
+	// Load the eBPF map
+	t.gadgetCtx = gadgetCtx
+	specMap, err := loadGraphmap()
+	if err != nil {
+		return fmt.Errorf("failed to load asset: %w", err)
+	}
+	if err := specMap.LoadAndAssign(&t.networkGraphMapObjects, &ebpf.CollectionOptions{}); err != nil {
+		return fmt.Errorf("failed to load ebpf program: %w", err)
+	}
+	return nil
+}
+
+func (t *Tracer) Start() error {
+	ctx := t.gadgetCtx.Context()
+	for {
+		if ctx.Err() != nil {
+			return nil
+		}
+		// Pop, but we don't need the results as we're handing the events over to the callback in cbMap
+		_, err := t.Pop()
+		if err != nil {
+			t.gadgetCtx.Logger().Debugf("start() returned with: %v", err)
+			return nil
+		}
+	}
+}
+
+func (t *Tracer) Stop() {
+}
+
+func (t *Tracer) SetEventHandler(handler any) {
+	nh, ok := handler.(func(ev *types.Event))
+	if !ok {
+		panic("event handler invalid")
+	}
+	t.eventCallback = nh
+}
+
+func (t *Tracer) AttachContainer(container *containercollection.Container) error {
+	err := t.Attach(container.Pid)
+	if err != nil {
+		return err
+	}
+	t.cbmapMutex.Lock()
+	t.cbmap[container.Netns] = func(ev *types.Event) {
+		ev.SetContainerInfo(container.Podname, container.Namespace, container.Name)
+		t.eventCallback(ev)
+	}
+	t.cbmapMutex.Unlock()
+	return nil
+}
+
+func (t *Tracer) DetachContainer(container *containercollection.Container) error {
+	return t.Detach(container.Pid)
 }

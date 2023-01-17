@@ -1,4 +1,4 @@
-// Copyright 2019-2021 The Inspektor Gadget authors
+// Copyright 2019-2023 The Inspektor Gadget authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/docker/go-units"
+
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/columns"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
@@ -29,7 +30,7 @@ const (
 var SortByDefault = []string{"-reads", "-writes", "-rbytes", "-wbytes"}
 
 const (
-	AllFilesParam = "pid"
+	AllFilesParam = "all-files"
 )
 
 // Stats represents the operations performed on a single file
@@ -62,4 +63,8 @@ func GetColumns() *columns.Columns[Stats] {
 	})
 
 	return cols
+}
+
+func (ev *Stats) GetMountNSID() uint64 {
+	return ev.MountNsID
 }

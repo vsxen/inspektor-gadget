@@ -1,4 +1,4 @@
-// Copyright 2019-2021 The Inspektor Gadget authors
+// Copyright 2019-2023 The Inspektor Gadget authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+//go:build !withoutebpf
 
 package tracer
 
@@ -253,4 +255,48 @@ func runProcfsCollector(config *Config, enricher gadgets.DataEnricherByMntNs) ([
 	}
 
 	return events, nil
+}
+
+// ---
+
+type Tracer struct {
+	config       *Config
+	eventHandler func(ev []*processcollectortypes.Event)
+}
+
+func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
+	tracer := &Tracer{
+		config: &Config{},
+	}
+	return tracer, nil
+}
+
+func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
+	params := gadgetCtx.GadgetParams()
+	t.config.ShowThreads = params.Get(ParamThreads).AsBool()
+	return nil
+}
+
+func (t *Tracer) SetEventHandlerArray(handler any) {
+	nh, ok := handler.(func(ev []*processcollectortypes.Event))
+	if !ok {
+		panic("event handler invalid")
+	}
+	t.eventHandler = nh
+}
+
+func (t *Tracer) SetMountNsMap(mntnsMap *ebpf.Map) {
+	t.config.MountnsMap = mntnsMap
+}
+
+func (t *Tracer) Start() error {
+	events, err := RunCollector(t.config, nil)
+	if err != nil {
+		return err
+	}
+	t.eventHandler(events)
+	return nil
+}
+
+func (t *Tracer) Stop() {
 }
