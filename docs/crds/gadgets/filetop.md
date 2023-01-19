@@ -9,7 +9,7 @@ The following parameters are supported:
  - interval: Output interval, in seconds. (default 1)
  - max_rows: Maximum rows to print. (default 20)
  - sort_by: The field to sort the results by (node,namespace,pod,container,pid,tid,comm,reads,writes,rbytes,wbytes,mountnsid,T,file). (default -reads,-writes,-rbytes,-wbytes)
- - pid: Show all files. (default false, i.e. show regular files only)
+ - all-files: Show all files. (default false, i.e. show regular files only)
 
 ### Example CR
 
