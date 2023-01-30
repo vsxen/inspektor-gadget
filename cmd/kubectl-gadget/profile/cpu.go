@@ -28,22 +28,13 @@ func newCPUCmd() *cobra.Command {
 	var cpuFlags commonprofile.CPUFlags
 
 	runCmd := func(cmd *cobra.Command, args []string) error {
-		if cpuFlags.ProfileUserOnly && cpuFlags.ProfileKernelOnly {
-			return commonutils.WrapInErrArgsNotSupported("-U and -K can't be used at the same time")
-		}
-
 		parser, err := commonutils.NewGadgetParserWithK8sInfo(&commonFlags.OutputConfig, types.GetColumns())
 		if err != nil {
 			return commonutils.WrapInErrParserCreate(err)
 		}
 
 		params := map[string]string{}
-		if cpuFlags.ProfileUserOnly {
-			params[types.ProfileUserParam] = ""
-		}
-		if cpuFlags.ProfileKernelOnly {
-			params[types.ProfileKernelParam] = ""
-		}
+		params[types.ProfileParamStack] = cpuFlags.ProfileStack
 
 		cpuGadget := &ProfileGadget{
 			gadgetName:    "profile",

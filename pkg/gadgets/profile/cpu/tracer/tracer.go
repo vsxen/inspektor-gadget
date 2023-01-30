@@ -446,7 +446,8 @@ func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 
 func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
 	params := gadgetCtx.GadgetParams()
-	t.config.UserStackOnly = params.Get(ParamUserStack).AsBool()
-	t.config.KernelStackOnly = params.Get(ParamKernelStack).AsBool()
+	stack := params.Get(types.ProfileParamStack).AsString()
+	t.config.UserStackOnly = stack == types.ProfileParamStackUser
+	t.config.KernelStackOnly = stack == types.ProfileParamStackKernel
 	return nil
 }

@@ -27,8 +27,7 @@ import (
 )
 
 type CPUFlags struct {
-	ProfileKernelOnly bool
-	ProfileUserOnly   bool
+	ProfileStack string
 }
 
 type CPUParser struct {
@@ -46,19 +45,12 @@ func NewCPUCmd(runCmd func(*cobra.Command, []string) error, flags *CPUFlags) *co
 		RunE:         runCmd,
 	}
 
-	cmd.PersistentFlags().BoolVarP(
-		&flags.ProfileUserOnly,
-		"user-stack",
-		"U",
-		false,
-		"Show stacks from user space only (no kernel space stacks)",
-	)
-	cmd.PersistentFlags().BoolVarP(
-		&flags.ProfileKernelOnly,
-		"kernel-stack",
-		"K",
-		false,
-		"Show stacks from kernel space only (no user space stacks)",
+	cmd.PersistentFlags().StringVarP(
+		&flags.ProfileStack,
+		"stack",
+		"S",
+		cpuTypes.ProfileParamStackBoth,
+		fmt.Sprintf("Show stack, possibles values are: %s", strings.Join(cpuTypes.ProfileParamPossibleStacks, ", ")),
 	)
 
 	return cmd
@@ -110,11 +102,12 @@ func (p *CPUParser) TransformReport(report *cpuTypes.Report) string {
 		return string(b)
 	case utils.OutputModeCustomColumns:
 		otherCols := p.TransformIntoColumns(report)
-		if p.CPUFlags.ProfileUserOnly {
+		switch p.CPUFlags.ProfileStack {
+		case cpuTypes.ProfileParamStackUser:
 			return otherCols + getReverseStringSlice(report.UserStack)
-		} else if p.CPUFlags.ProfileKernelOnly {
+		case cpuTypes.ProfileParamStackKernel:
 			return otherCols + getReverseStringSlice(report.KernelStack)
-		} else {
+		default:
 			return otherCols + getReverseStringSlice(report.KernelStack) + getReverseStringSlice(report.UserStack)
 		}
 	}

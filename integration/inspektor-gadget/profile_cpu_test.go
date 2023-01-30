@@ -34,7 +34,7 @@ func TestProfileCpu(t *testing.T) {
 		WaitUntilTestPodReadyCommand(ns),
 		{
 			Name: "RunProfileCpuGadget",
-			Cmd:  fmt.Sprintf("$KUBECTL_GADGET profile cpu -n %s -p test-pod -K --timeout 15 -o json", ns),
+			Cmd:  fmt.Sprintf("$KUBECTL_GADGET profile cpu -n %s -p test-pod -S kernel --timeout 15 -o json", ns),
 			ExpectedOutputFn: func(output string) error {
 				expectedEntry := &profilecpuTypes.Report{
 					CommonData: BuildCommonData(ns),
