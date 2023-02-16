@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	k8syaml "sigs.k8s.io/yaml"
 )
 
 // BaseElement represent any element that needs to be transform into a requested
@@ -102,6 +104,22 @@ func (p *BaseParser[E]) Transform(element *E, toColumns func(*E) string) string 
 	switch p.OutputConfig.OutputMode {
 	case OutputModeJSON:
 		b, err := json.Marshal(element)
+		if err != nil {
+			fmt.Fprint(os.Stderr, fmt.Sprint(WrapInErrMarshalOutput(err)))
+			return ""
+		}
+
+		return string(b)
+	case OutputModeJSONPretty:
+		b, err := json.MarshalIndent(element, "", "    ")
+		if err != nil {
+			fmt.Fprint(os.Stderr, fmt.Sprint(WrapInErrMarshalOutput(err)))
+			return ""
+		}
+
+		return string(b)
+	case OutputModeYAML:
+		b, err := k8syaml.Marshal(element)
 		if err != nil {
 			fmt.Fprint(os.Stderr, fmt.Sprint(WrapInErrMarshalOutput(err)))
 			return ""

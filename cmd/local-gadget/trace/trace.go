@@ -18,10 +18,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	k8syaml "sigs.k8s.io/yaml"
 
 	"github.com/cilium/ebpf"
-	"github.com/spf13/cobra"
-
 	commontrace "github.com/inspektor-gadget/inspektor-gadget/cmd/common/trace"
 	commonutils "github.com/inspektor-gadget/inspektor-gadget/cmd/common/utils"
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/local-gadget/utils"
@@ -30,6 +29,7 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	localgadgetmanager "github.com/inspektor-gadget/inspektor-gadget/pkg/local-gadget-manager"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
+	"github.com/spf13/cobra"
 )
 
 // TraceGadget represents a gadget belonging to the trace category.
@@ -76,6 +76,22 @@ func (g *TraceGadget[Event]) Run() error {
 		switch g.commonFlags.OutputMode {
 		case commonutils.OutputModeJSON:
 			b, err := json.Marshal(event)
+			if err != nil {
+				fmt.Fprint(os.Stderr, fmt.Sprint(commonutils.WrapInErrMarshalOutput(err)))
+				return
+			}
+
+			fmt.Println(string(b))
+		case commonutils.OutputModeJSONPretty:
+			b, err := json.MarshalIndent(event, "", "    ")
+			if err != nil {
+				fmt.Fprint(os.Stderr, fmt.Sprint(commonutils.WrapInErrMarshalOutput(err)))
+				return
+			}
+
+			fmt.Println(string(b))
+		case commonutils.OutputModeYAML:
+			b, err := k8syaml.Marshal(event)
 			if err != nil {
 				fmt.Fprint(os.Stderr, fmt.Sprint(commonutils.WrapInErrMarshalOutput(err)))
 				return

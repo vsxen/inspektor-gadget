@@ -27,10 +27,12 @@ import (
 
 const (
 	OutputModeJSON          = "json"
+	OutputModeJSONPretty    = "jsonpretty"
+	OutputModeYAML          = "yaml"
 	OutputModeCustomColumns = "custom-columns"
 )
 
-var SupportedOutputModes = []string{OutputModeJSON, OutputModeCustomColumns}
+var SupportedOutputModes = []string{OutputModeJSON, OutputModeJSONPretty, OutputModeYAML, OutputModeCustomColumns}
 
 // OutputConfig contains the flags that describes how to print the gadget's output
 type OutputConfig struct {
@@ -71,6 +73,10 @@ func (config *OutputConfig) ParseOutputConfig() error {
 		config.OutputMode = OutputModeCustomColumns
 		return nil
 	case config.OutputMode == OutputModeJSON:
+		return nil
+	case config.OutputMode == OutputModeJSONPretty:
+		return nil
+	case config.OutputMode == OutputModeYAML:
 		return nil
 	case strings.HasPrefix(config.OutputMode, OutputModeCustomColumns):
 		parts := strings.Split(config.OutputMode, "=")

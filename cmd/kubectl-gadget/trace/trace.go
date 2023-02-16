@@ -26,6 +26,7 @@ import (
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 
 	"github.com/spf13/cobra"
+	k8syaml "sigs.k8s.io/yaml"
 )
 
 // TraceGadget represents a gadget belonging to the trace category.
@@ -48,7 +49,7 @@ func (g *TraceGadget[Event]) Run() error {
 		Parameters:       g.params,
 	}
 
-	if g.commonFlags.OutputMode != commonutils.OutputModeJSON {
+	if g.commonFlags.OutputMode == commonutils.OutputModeCustomColumns {
 		fmt.Println(g.parser.BuildColumnsHeader())
 	}
 
@@ -69,6 +70,22 @@ func (g *TraceGadget[Event]) Run() error {
 		switch g.commonFlags.OutputMode {
 		case commonutils.OutputModeJSON:
 			b, err := json.Marshal(e)
+			if err != nil {
+				fmt.Fprint(os.Stderr, fmt.Sprint(commonutils.WrapInErrMarshalOutput(err)))
+				return ""
+			}
+
+			return string(b)
+		case commonutils.OutputModeJSONPretty:
+			b, err := json.MarshalIndent(e, "", "    ")
+			if err != nil {
+				fmt.Fprint(os.Stderr, fmt.Sprint(commonutils.WrapInErrMarshalOutput(err)))
+				return ""
+			}
+
+			return string(b)
+		case commonutils.OutputModeYAML:
+			b, err := k8syaml.Marshal(e)
 			if err != nil {
 				fmt.Fprint(os.Stderr, fmt.Sprint(commonutils.WrapInErrMarshalOutput(err)))
 				return ""
