@@ -96,6 +96,11 @@ type ContainerInfoFromMountNSID interface {
 	GetMountNSID() uint64
 }
 
+type ContainerInfoFromNetNSID interface {
+	ContainerInfoSetters
+	GetNetNSID() uint64
+}
+
 type ContainerInfoSetters interface {
 	SetContainerInfo(pod, namespace, container string)
 	SetNode(string)

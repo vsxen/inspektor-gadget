@@ -30,6 +30,7 @@ const (
 
 type Event struct {
 	eventtypes.Event
+	eventtypes.NetNsID
 
 	Pid       uint32 `json:"pid,omitempty" column:"pid,template:pid"`
 	Tid       uint32 `json:"tid,omitempty" column:"tid,template:pid"`

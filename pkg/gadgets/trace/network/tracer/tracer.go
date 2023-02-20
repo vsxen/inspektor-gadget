@@ -74,8 +74,6 @@ type Tracer struct {
 
 	eventCallback func(ev *types.Event)
 	gadgetCtx     gadgets.GadgetContext
-	cbmap         map[uint64]func(ev *types.Event)
-	cbmapMutex    sync.RWMutex
 }
 
 func NewTracer(enricher gadgets.DataEnricherByNetNs) (_ *Tracer, err error) {
@@ -203,9 +201,6 @@ func protoString(proto int) string {
 }
 
 func (t *Tracer) Pop() (events []*types.Event, err error) {
-	t.cbmapMutex.Lock()
-	defer t.cbmapMutex.Unlock()
-
 	defer func() {
 		if err != nil {
 			return
@@ -236,12 +231,13 @@ func (t *Tracer) Pop() (events []*types.Event, err error) {
 			Proto:      protoString(int(key.Proto)),
 			Port:       gadgets.Htons(key.Port),
 			RemoteAddr: ip.String(),
+			NetNsID:    eventtypes.NetNsID{NetNsID: key.ContainerNetns},
 		}
 
 		if t.enricher != nil {
 			t.enricher.EnrichByNetNs(&e.CommonData, key.ContainerNetns)
 		} else {
-			t.cbmap[key.ContainerNetns](e)
+			t.eventCallback(e)
 		}
 		return e
 	}
@@ -353,7 +349,6 @@ func (t *Tracer) Close() {
 func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 	tracer := &Tracer{
 		attachments: make(map[uint64]*attachment),
-		cbmap:       make(map[uint64]func(ev *types.Event)),
 	}
 	return tracer, nil
 }
@@ -398,17 +393,7 @@ func (t *Tracer) SetEventHandler(handler any) {
 }
 
 func (t *Tracer) AttachContainer(container *containercollection.Container) error {
-	err := t.Attach(container.Pid)
-	if err != nil {
-		return err
-	}
-	t.cbmapMutex.Lock()
-	t.cbmap[container.Netns] = func(ev *types.Event) {
-		ev.SetContainerInfo(container.Podname, container.Namespace, container.Name)
-		t.eventCallback(ev)
-	}
-	t.cbmapMutex.Unlock()
-	return nil
+	return t.Attach(container.Pid)
 }
 
 func (t *Tracer) DetachContainer(container *containercollection.Container) error {

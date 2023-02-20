@@ -185,6 +185,14 @@ func (e *MountNsID) GetMountNSID() uint64 {
 	return e.MountNsID
 }
 
+type NetNsID struct {
+	NetNsID uint64 `json:"netnsid,omitempty" column:"netns,template:ns"`
+}
+
+func (e *NetNsID) GetNetNSID() uint64 {
+	return e.NetNsID
+}
+
 func (e *Event) GetTimestamp() int64 {
 	return int64(e.Timestamp)
 }

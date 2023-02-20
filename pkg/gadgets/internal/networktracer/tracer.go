@@ -29,7 +29,6 @@ import (
 	containerutils "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/internal/socketenricher"
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/rawsock"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
@@ -211,12 +210,7 @@ func (t *Tracer[Event]) SetEventHandler(handler any) {
 }
 
 func (t *Tracer[Event]) AttachContainer(container *containercollection.Container) error {
-	return t.Attach(container.Pid, func(ev *Event) {
-		if setter, ok := any(ev).(operators.ContainerInfoSetters); ok {
-			setter.SetContainerInfo(container.Podname, container.Namespace, container.Name)
-		}
-		t.eventHandler(ev)
-	})
+	return t.Attach(container.Pid, t.eventHandler)
 }
 
 func (t *Tracer[Event]) DetachContainer(container *containercollection.Container) error {

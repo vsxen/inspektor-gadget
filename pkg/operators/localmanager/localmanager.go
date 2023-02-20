@@ -91,8 +91,11 @@ func (l *LocalManager) ParamDescs() params.ParamDescs {
 }
 
 func (l *LocalManager) CanOperateOn(gadget gadgets.GadgetDesc) bool {
-	// We need to be able to get MountNSID and set ContainerInfo, so check for that first
-	_, canEnrichEvent := gadget.EventPrototype().(operators.ContainerInfoFromMountNSID)
+	// We need to be able to get MountNSID or NetNSID, and set ContainerInfo, so
+	// check for that first
+	_, canEnrichEventFromMountNs := gadget.EventPrototype().(operators.ContainerInfoFromMountNSID)
+	_, canEnrichEventFromNetNs := gadget.EventPrototype().(operators.ContainerInfoFromNetNSID)
+	canEnrichEvent := canEnrichEventFromMountNs || canEnrichEventFromNetNs
 
 	// Secondly, we need to be able to inject the ebpf map onto the gadget instance
 	gi, ok := gadget.(gadgets.GadgetInstantiate)
@@ -109,6 +112,8 @@ func (l *LocalManager) CanOperateOn(gadget gadgets.GadgetDesc) bool {
 	_, isAttacher := instance.(Attacher)
 
 	log.Debugf("> canEnrichEvent: %v", canEnrichEvent)
+	log.Debugf("\t> canEnrichEventFromMountNs: %v", canEnrichEventFromMountNs)
+	log.Debugf("\t> canEnrichEventFromNetNs: %v", canEnrichEventFromNetNs)
 	log.Debugf("> isMountNsMapSetter: %v", isMountNsMapSetter)
 	log.Debugf("> isAttacher: %v", isAttacher)
 
@@ -166,7 +171,9 @@ func (l *LocalManager) Close() error {
 }
 
 func (l *LocalManager) Instantiate(gadgetContext operators.GadgetContext, gadgetInstance any, params *params.Params) (operators.OperatorInstance, error) {
-	_, canEnrichEvent := gadgetContext.GadgetDesc().EventPrototype().(operators.ContainerInfoFromMountNSID)
+	_, canEnrichEventFromMountNs := gadgetContext.GadgetDesc().EventPrototype().(operators.ContainerInfoFromMountNSID)
+	_, canEnrichEventFromNetNs := gadgetContext.GadgetDesc().EventPrototype().(operators.ContainerInfoFromNetNSID)
+	canEnrichEvent := canEnrichEventFromMountNs || canEnrichEventFromNetNs
 
 	traceInstance := &localManagerTrace{
 		manager:            l,
@@ -233,7 +240,8 @@ func (l *localManagerTrace) PreGadgetRun() error {
 
 			l.attachedContainers[container] = struct{}{}
 
-			log.Debugf("tracer attached") // TODO: container info?
+			log.Debugf("tracer attached: container %q pid %d mntns %d netns %d",
+				container.Name, container.Pid, container.Mntns, container.Netns)
 		}
 
 		detachContainerFunc := func(container *containercollection.Container) {
@@ -243,7 +251,8 @@ func (l *localManagerTrace) PreGadgetRun() error {
 				log.Warnf("stop tracing container %q: %s", container.Name, err)
 				return
 			}
-			log.Debugf("tracer detached") // TODO: container info?
+			log.Debugf("tracer detached: container %q pid %d mntns %d netns %d",
+				container.Name, container.Pid, container.Mntns, container.Netns)
 		}
 
 		id := uuid.New()
@@ -289,11 +298,27 @@ func (l *localManagerTrace) PostGadgetRun() error {
 	return nil
 }
 
+func (l *localManagerTrace) enrich(ev any) error {
+	if _, canEnrichEventFromMountNs := ev.(operators.ContainerInfoFromMountNSID); canEnrichEventFromMountNs {
+		err := l.manager.localGadgetManager.ContainerCollection.EnrichEventByMntNs(ev)
+		if err != nil {
+			return err
+		}
+	}
+	if _, canEnrichEventFromNetNs := ev.(operators.ContainerInfoFromNetNSID); canEnrichEventFromNetNs {
+		err := l.manager.localGadgetManager.ContainerCollection.EnrichEventByNetNs(ev)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (l *localManagerTrace) EnrichEvent(ev any) error {
 	if !l.enrichEvents {
 		return nil
 	}
-	return l.manager.localGadgetManager.ContainerCollection.EnrichEvent(ev)
+	return l.enrich(ev)
 }
 
 func (l *localManagerTrace) Enricher(next operators.EnricherFunc) operators.EnricherFunc {
@@ -301,8 +326,7 @@ func (l *localManagerTrace) Enricher(next operators.EnricherFunc) operators.Enri
 		return nil
 	}
 	return func(ev any) error {
-		err := l.manager.localGadgetManager.ContainerCollection.EnrichEvent(ev)
-		if err != nil {
+		if err := l.enrich(ev); err != nil {
 			return err
 		}
 		return next(ev)

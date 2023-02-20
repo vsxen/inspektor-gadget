@@ -59,7 +59,7 @@ func NewTracer() (*Tracer, error) {
 			return nil, errors.New("invalid sample size")
 		}
 
-		event, err := bpfEventToDNSEvent(bpfEvent)
+		event, err := bpfEventToDNSEvent(bpfEvent, netns)
 		if err != nil {
 			return nil, err
 		}
@@ -230,7 +230,7 @@ func parseLabelSequence(sample []byte) (ret string) {
 	return ret
 }
 
-func bpfEventToDNSEvent(bpfEvent *dnsEventT) (*types.Event, error) {
+func bpfEventToDNSEvent(bpfEvent *dnsEventT, netns uint64) (*types.Event, error) {
 	event := types.Event{
 		Event: eventtypes.Event{
 			Type: eventtypes.NORMAL,
@@ -239,6 +239,7 @@ func bpfEventToDNSEvent(bpfEvent *dnsEventT) (*types.Event, error) {
 		Pid:       bpfEvent.Pid,
 		Tid:       bpfEvent.Tid,
 		MountNsID: bpfEvent.MountNsId,
+		NetNsID:   eventtypes.NetNsID{NetNsID: netns},
 		Comm:      gadgets.FromCString(bpfEvent.Task[:]),
 	}
 	event.Event.Timestamp = gadgets.WallTimeFromBootTime(bpfEvent.Timestamp)

@@ -32,6 +32,7 @@ const (
 
 type Event struct {
 	eventtypes.Event
+	eventtypes.NetNsID
 
 	PktType string `json:"pktType,omitempty" column:"type,maxWidth:9"`
 	Proto   string `json:"proto,omitempty" column:"proto,maxWidth:5"`

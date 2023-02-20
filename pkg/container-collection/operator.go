@@ -22,7 +22,7 @@ import (
 
 func (cc *ContainerCollection) Enrich(next func(any) error) func(any) error {
 	return func(ev any) error {
-		err := cc.EnrichEvent(ev)
+		err := cc.EnrichEventByMntNs(ev)
 		if err != nil {
 			return err
 		}
@@ -30,7 +30,7 @@ func (cc *ContainerCollection) Enrich(next func(any) error) func(any) error {
 	}
 }
 
-func (cc *ContainerCollection) EnrichEvent(ev any) error {
+func (cc *ContainerCollection) EnrichEventByMntNs(ev any) error {
 	event, ok := ev.(operators.ContainerInfoFromMountNSID)
 	if !ok {
 		return errors.New("invalid event to enrich")
@@ -41,5 +41,32 @@ func (cc *ContainerCollection) EnrichEvent(ev any) error {
 	if container != nil {
 		event.SetContainerInfo(container.Podname, container.Namespace, container.Name)
 	}
+	return nil
+}
+
+func (cc *ContainerCollection) EnrichEventByNetNs(ev any) error {
+	event, ok := ev.(operators.ContainerInfoFromNetNSID)
+	if !ok {
+		return errors.New("invalid event to enrich")
+	}
+	event.SetNode(cc.nodeName)
+
+	containers := cc.LookupContainersByNetns(event.GetNetNSID())
+	if len(containers) == 0 || containers[0].HostNetwork {
+		return nil
+	}
+	if len(containers) == 1 {
+		event.SetContainerInfo(containers[0].Podname, containers[0].Namespace, containers[0].Name)
+		return nil
+	}
+	if containers[0].Podname != "" && containers[0].Namespace != "" {
+		// Kubernetes containers within the same pod.
+		event.SetContainerInfo(containers[0].Podname, containers[0].Namespace, "")
+	}
+	// else {
+	// 	TODO: Non-Kubernetes containers sharing the same network namespace.
+	// 	What should we do here?
+	// }
+
 	return nil
 }

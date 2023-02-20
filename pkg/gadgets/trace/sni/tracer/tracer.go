@@ -82,6 +82,7 @@ func parseSNIEvent(sample []byte, netns uint64) (*types.Event, error) {
 		Pid:       bpfEvent.Pid,
 		Tid:       bpfEvent.Tid,
 		MountNsID: bpfEvent.MountNsId,
+		NetNsID:   eventtypes.NetNsID{NetNsID: netns},
 		Comm:      gadgets.FromCString(bpfEvent.Task[:]),
 
 		Name: name,
