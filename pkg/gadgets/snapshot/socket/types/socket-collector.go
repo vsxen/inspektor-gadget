@@ -39,6 +39,7 @@ var ProtocolsMap = map[string]Proto{
 
 type Event struct {
 	eventtypes.Event
+	eventtypes.NetNsID
 
 	Protocol      string `json:"protocol" column:"protocol,maxWidth:8"`
 	LocalAddress  string `json:"localAddress" column:"localAddr,template:ipaddr,hide"`

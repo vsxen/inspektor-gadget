@@ -25,6 +25,7 @@ import (
 	"github.com/cilium/ebpf/link"
 
 	containercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/container-collection"
+	containerutils "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	socketcollectortypes "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/snapshot/socket/types"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/netnsenter"
@@ -165,9 +166,17 @@ func RunCollector(pid uint32, podname, namespace, node string, proto socketcolle
 					return err
 				}
 
+				// TODO: Receive the netns from caller
+				netns, err := containerutils.GetNetNs(int(pid))
+				if err != nil {
+					return fmt.Errorf("getting netns for pid %d: %w", pid, err)
+				}
+
 				sockets = append(sockets, &socketcollectortypes.Event{
 					Event: eventtypes.Event{
 						Type: eventtypes.NORMAL,
+						// TODO: This can be removed as events will be enriched
+						// by the eventHandler
 						CommonData: eventtypes.CommonData{
 							Node:      node,
 							Namespace: namespace,
@@ -181,6 +190,7 @@ func RunCollector(pid uint32, podname, namespace, node string, proto socketcolle
 					RemotePort:    destp,
 					Status:        status,
 					InodeNumber:   inodeNumber,
+					NetNsID:       eventtypes.NetNsID{NetNsID: netns},
 				})
 			}
 
@@ -201,14 +211,18 @@ func RunCollector(pid uint32, podname, namespace, node string, proto socketcolle
 // ---
 
 type Tracer struct {
-	visitedNamespaced map[uint64]struct{}
+	// visitedNamespaced is a map where the key is the netns inode number and
+	// the value is the pid of one of the containers that share that netns. Such
+	// pid is used by NetnsEnter. TODO: Improve NetnsEnter to also work with the
+	// netns directly.
+	visitedNamespaced map[uint64]uint32
 	protocols         string
 	eventHandler      func([]*socketcollectortypes.Event)
 }
 
 func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 	tracer := &Tracer{
-		visitedNamespaced: map[uint64]struct{}{},
+		visitedNamespaced: make(map[uint64]uint32),
 	}
 	return tracer, nil
 }
@@ -220,21 +234,14 @@ func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
 }
 
 func (t *Tracer) AttachContainer(container *containercollection.Container) error {
-	// TODO: Necessary?
-	// if container.Pid == 0 {
-	// 	return fmt.Errorf("container %q does not have PID", container.Name)
-	// }
+	if container.Pid == 0 {
+		panic("Pid is 0 for container " + container.Name + " (" + container.ID + ")")
+	}
 	if _, ok := t.visitedNamespaced[container.Netns]; ok {
 		return nil
 	}
-	t.visitedNamespaced[container.Netns] = struct{}{}
-	res, err := RunCollector(container.Pid, container.Podname, container.Namespace, "", socketcollectortypes.ProtocolsMap[t.protocols]) // TODO: Node
-
-	for _, ev := range res {
-		ev.SetContainerInfo(container.Podname, container.Namespace, container.Name)
-	}
-	t.eventHandler(res)
-	return err
+	t.visitedNamespaced[container.Netns] = container.Pid
+	return nil
 }
 
 func (t *Tracer) DetachContainer(container *containercollection.Container) error {
@@ -247,4 +254,22 @@ func (t *Tracer) SetEventHandlerArray(handler any) {
 		panic("event handler invalid")
 	}
 	t.eventHandler = nh
+}
+
+func (t *Tracer) Run() error {
+	allSockets := []*socketcollectortypes.Event{}
+
+	for netns, pid := range t.visitedNamespaced {
+		// TODO: Remove podname, namespace and node arguments from RunCollector.
+		// The enrichment will be done in the event handler. In addition, pass
+		// the netns to avoid retrieving it again in RunCollector.
+		sockets, err := RunCollector(pid, "", "", "", socketcollectortypes.ProtocolsMap[t.protocols])
+		if err != nil {
+			return fmt.Errorf("collecting sockets in netns %d: %w", netns, err)
+		}
+		allSockets = append(allSockets, sockets...)
+	}
+
+	t.eventHandler(allSockets)
+	return nil
 }

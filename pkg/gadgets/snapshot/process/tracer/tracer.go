@@ -289,14 +289,11 @@ func (t *Tracer) SetMountNsMap(mntnsMap *ebpf.Map) {
 	t.config.MountnsMap = mntnsMap
 }
 
-func (t *Tracer) Start() error {
-	events, err := RunCollector(t.config, nil)
+func (t *Tracer) Run() error {
+	processes, err := RunCollector(t.config, nil)
 	if err != nil {
 		return err
 	}
-	t.eventHandler(events)
+	t.eventHandler(processes)
 	return nil
-}
-
-func (t *Tracer) Stop() {
 }

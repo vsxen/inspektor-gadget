@@ -132,6 +132,12 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (out []byte, err er
 			log.Debugf("calling gadget.Stop()")
 			startstop.Stop()
 		}()
+	} else if run, ok := gadgetInstance.(gadgets.RunGadget); ok {
+		log.Debugf("calling gadget.Run()")
+		err := run.Run()
+		if err != nil {
+			return out, fmt.Errorf("running gadget: %w", err)
+		}
 	}
 
 	log.Debugf("running")

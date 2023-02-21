@@ -113,6 +113,10 @@ type StartStopGadget interface {
 	Stop()
 }
 
+type RunGadget interface {
+	Run() error
+}
+
 // StartStopAltGadget is an alternative interface to StartStop, as some gadgets
 // already have the Start() and Stop() functions defined, but with a different signature
 // After we've migrated to the interfaces, the gadgets should be altered to use the
