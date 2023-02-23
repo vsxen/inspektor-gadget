@@ -86,21 +86,39 @@ type OperatorInstance interface {
 
 type Operators []Operator
 
-// ContainerInfoFromMountNSID is a typical kubernetes operator interface that adds node, pod, namespace and container
-// information given the MountNSID
-type ContainerInfoFromMountNSID interface {
-	ContainerInfoSetters
+type MountNsIDGetter interface {
 	GetMountNSID() uint64
 }
 
-type ContainerInfoFromNetNSID interface {
-	ContainerInfoSetters
+type NetNsIDGetter interface {
 	GetNetNSID() uint64
+}
+
+type VolumeInfoSetter interface {
+	SetVolumeInfo(any)
+}
+
+// VolumeInfoFromMountNSID ... TODO: Add description
+type VolumeInfoFromMountNSID interface {
+	VolumeInfoSetter
+	MountNsIDGetter
 }
 
 type ContainerInfoSetters interface {
 	SetContainerInfo(pod, namespace, container string)
 	SetNode(string)
+}
+
+// ContainerInfoFromMountNSID is a typical kubernetes operator interface that
+// adds node, pod, namespace and container information given the MountNSID
+type ContainerInfoFromMountNSID interface {
+	ContainerInfoSetters
+	MountNsIDGetter
+}
+
+type ContainerInfoFromNetNSID interface {
+	ContainerInfoSetters
+	NetNsIDGetter
 }
 
 var allOperators = map[string]Operator{}

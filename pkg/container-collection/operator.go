@@ -18,7 +18,7 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 )
 
-func (cc *ContainerCollection) EnrichEventByMntNs(event operators.ContainerInfoFromMountNSID) {
+func (cc *ContainerCollection) EnrichContainerInfoFromMntNs(event operators.ContainerInfoFromMountNSID) {
 	event.SetNode(cc.nodeName)
 
 	container := cc.LookupContainerByMntns(event.GetMountNSID())
@@ -27,7 +27,7 @@ func (cc *ContainerCollection) EnrichEventByMntNs(event operators.ContainerInfoF
 	}
 }
 
-func (cc *ContainerCollection) EnrichEventByNetNs(event operators.ContainerInfoFromNetNSID) {
+func (cc *ContainerCollection) EnrichContainerInfoFromNetNs(event operators.ContainerInfoFromNetNSID) {
 	event.SetNode(cc.nodeName)
 
 	containers := cc.LookupContainersByNetns(event.GetNetNSID())
@@ -48,4 +48,13 @@ func (cc *ContainerCollection) EnrichEventByNetNs(event operators.ContainerInfoF
 	// }
 
 	return
+}
+
+func (cc *ContainerCollection) EnrichVolumeInfoFromMountNs(event operators.VolumeInfoFromMountNSID) {
+	container := cc.LookupContainerByMntns(event.GetMountNSID())
+	if container != nil {
+		// Enrich the event as you need to using the container info. Notice that
+		// the gadget must implement this function to be able to use it.
+		event.SetVolumeInfo("")
+	}
 }

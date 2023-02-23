@@ -90,12 +90,25 @@ func (l *LocalManager) ParamDescs() params.ParamDescs {
 	}
 }
 
+func canEnrich(eventPrototype any) bool {
+	_, canEnrichContainerInfoFromMountNs := eventPrototype.(operators.ContainerInfoFromMountNSID)
+	_, canEnrichContainerInfoFromNetNs := eventPrototype.(operators.ContainerInfoFromNetNSID)
+	_, canEnrichVolumeInfoFromMountNSID := eventPrototype.(operators.VolumeInfoFromMountNSID)
+
+	canEnrichEvent := canEnrichContainerInfoFromMountNs || canEnrichContainerInfoFromNetNs || canEnrichVolumeInfoFromMountNSID
+
+	log.Debugf("> canEnrichEvent: %v", canEnrichEvent)
+	log.Debugf("\t> canEnrichContainerInfoFromMountNs: %v", canEnrichContainerInfoFromMountNs)
+	log.Debugf("\t> canEnrichContainerInfoFromNetNs: %v", canEnrichContainerInfoFromNetNs)
+	log.Debugf("\t> canEnrichVolumeInfoFromMountNSID: %v", canEnrichVolumeInfoFromMountNSID)
+
+	return canEnrichEvent
+}
+
 func (l *LocalManager) CanOperateOn(gadget gadgets.GadgetDesc) bool {
-	// We need to be able to get MountNSID or NetNSID, and set ContainerInfo, so
-	// check for that first
-	_, canEnrichEventFromMountNs := gadget.EventPrototype().(operators.ContainerInfoFromMountNSID)
-	_, canEnrichEventFromNetNs := gadget.EventPrototype().(operators.ContainerInfoFromNetNSID)
-	canEnrichEvent := canEnrichEventFromMountNs || canEnrichEventFromNetNs
+	// We need to be able to get MountNSID and/or NetNSID to set ContainerInfo
+	// and/or VolumeInfo
+	canEnrichEvent := canEnrich(gadget.EventPrototype)
 
 	// Secondly, we need to be able to inject the ebpf map onto the gadget instance
 	gi, ok := gadget.(gadgets.GadgetInstantiate)
@@ -111,9 +124,6 @@ func (l *LocalManager) CanOperateOn(gadget gadgets.GadgetDesc) bool {
 	_, isMountNsMapSetter := instance.(MountNsMapSetter)
 	_, isAttacher := instance.(Attacher)
 
-	log.Debugf("> canEnrichEvent: %v", canEnrichEvent)
-	log.Debugf("\t> canEnrichEventFromMountNs: %v", canEnrichEventFromMountNs)
-	log.Debugf("\t> canEnrichEventFromNetNs: %v", canEnrichEventFromNetNs)
 	log.Debugf("> isMountNsMapSetter: %v", isMountNsMapSetter)
 	log.Debugf("> isAttacher: %v", isAttacher)
 
@@ -171,13 +181,9 @@ func (l *LocalManager) Close() error {
 }
 
 func (l *LocalManager) Instantiate(gadgetContext operators.GadgetContext, gadgetInstance any, params *params.Params) (operators.OperatorInstance, error) {
-	_, canEnrichEventFromMountNs := gadgetContext.GadgetDesc().EventPrototype().(operators.ContainerInfoFromMountNSID)
-	_, canEnrichEventFromNetNs := gadgetContext.GadgetDesc().EventPrototype().(operators.ContainerInfoFromNetNSID)
-	canEnrichEvent := canEnrichEventFromMountNs || canEnrichEventFromNetNs
-
 	traceInstance := &localManagerTrace{
 		manager:            l,
-		enrichEvents:       canEnrichEvent,
+		enrichEvents:       canEnrich(gadgetContext.GadgetDesc().EventPrototype()),
 		attachedContainers: make(map[*containercollection.Container]struct{}),
 		params:             params,
 		gadgetInstance:     gadgetInstance,
@@ -299,11 +305,14 @@ func (l *localManagerTrace) PostGadgetRun() error {
 }
 
 func (l *localManagerTrace) enrich(ev any) {
-	if event, canEnrichEventFromMountNs := ev.(operators.ContainerInfoFromMountNSID); canEnrichEventFromMountNs {
-		l.manager.localGadgetManager.ContainerCollection.EnrichEventByMntNs(event)
+	if event, canEnrichContainerInfoFromMountNs := ev.(operators.ContainerInfoFromMountNSID); canEnrichContainerInfoFromMountNs {
+		l.manager.localGadgetManager.ContainerCollection.EnrichContainerInfoFromMntNs(event)
 	}
-	if event, canEnrichEventFromNetNs := ev.(operators.ContainerInfoFromNetNSID); canEnrichEventFromNetNs {
-		l.manager.localGadgetManager.ContainerCollection.EnrichEventByNetNs(event)
+	if event, canEnrichContainerInfoFromNetNs := ev.(operators.ContainerInfoFromNetNSID); canEnrichContainerInfoFromNetNs {
+		l.manager.localGadgetManager.ContainerCollection.EnrichContainerInfoFromNetNs(event)
+	}
+	if event, canEnrichVolumeInfoFromMountNs := ev.(operators.VolumeInfoFromMountNSID); canEnrichVolumeInfoFromMountNs {
+		l.manager.localGadgetManager.ContainerCollection.EnrichVolumeInfoFromMountNs(event)
 	}
 }
 
