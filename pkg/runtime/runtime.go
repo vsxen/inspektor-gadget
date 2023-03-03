@@ -46,4 +46,5 @@ type Runtime interface {
 	GlobalParamDescs() params.ParamDescs
 	ParamDescs() params.ParamDescs
 	RunGadget(gadgetCtx GadgetContext) ([]byte, error)
+	GetCatalog() (*Catalog, error)
 }
