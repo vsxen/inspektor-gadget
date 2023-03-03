@@ -59,22 +59,32 @@ func AddCommandsFromRegistry(rootCmd *cobra.Command, runtime runtime.Runtime, co
 
 	// Add all known gadgets to cobra in their respective categories
 	categories := gadgets.GetCategories()
-	for _, gadgetDesc := range gadgetregistry.GetAll() {
+	catalog, _ := runtime.GetCatalog()
+	if catalog == nil {
+		return
+	}
+
+	for _, gadgetInfo := range catalog.Gadgets {
+		gadgetDesc := gadgetregistry.Get(gadgetInfo.Category, gadgetInfo.Name)
+		if gadgetDesc == nil {
+			// This only happens, if the gadget is only known to the remote side. In this case, let's skip for now. In
+			// the future, we could at least support raw output for these unknown gadgets.
+			continue
+		}
+
 		categoryCmd := rootCmd
-		if gadgetDesc.Category() != gadgets.CategoryNone {
-			cmd, ok := lookup[gadgetDesc.Category()]
+		if gadgetInfo.Category != gadgets.CategoryNone {
+			cmd, ok := lookup[gadgetInfo.Category]
 			if !ok {
-				// Category not found, add it
-				categoryDescription, ok := categories[gadgetDesc.Category()]
-				if !ok {
-					panic(fmt.Errorf("category unknown: %q", gadgetDesc.Category()))
-				}
+				// Category not found, add it - if a gadget category is unknown, we'll still add it, even if we don't
+				// have a description.
+				categoryDescription := categories[gadgetInfo.Category]
 				cmd = &cobra.Command{
-					Use:   gadgetDesc.Category(),
+					Use:   gadgetInfo.Category,
 					Short: categoryDescription,
 				}
 				rootCmd.AddCommand(cmd)
-				lookup[gadgetDesc.Category()] = cmd
+				lookup[gadgetInfo.Category] = cmd
 			}
 			categoryCmd = cmd
 		}
@@ -84,6 +94,7 @@ func AddCommandsFromRegistry(rootCmd *cobra.Command, runtime runtime.Runtime, co
 			runtime,
 			runtimeGlobalParams,
 			operatorsGlobalParamsCollection,
+			gadgetInfo.OperatorParamsCollection.ToParams(),
 		))
 	}
 }
@@ -114,6 +125,7 @@ func buildCommandFromGadget(
 	runtime runtime.Runtime,
 	runtimeGlobalParams *params.Params,
 	operatorsGlobalParamsCollection params.Collection,
+	operatorsParamsCollection params.Collection,
 ) *cobra.Command {
 	var outputMode string
 	var verbose bool
@@ -137,7 +149,9 @@ func buildCommandFromGadget(
 
 	// Get per gadget operator params
 	validOperators := operators.GetOperatorsForGadget(gadgetDesc)
-	operatorsParamsCollection := validOperators.ParamCollection()
+
+	// TODO: Combine remote operator params with locally available ones
+	//  Example use case: setting default namespace for kubernetes
 
 	cmd := &cobra.Command{
 		Use:          gadgetDesc.Name(),
