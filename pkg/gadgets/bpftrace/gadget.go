@@ -52,7 +52,7 @@ func (g *GadgetDesc) ParamDescs() params.ParamDescs {
 			Alias:       "e",
 			Description: "program to run",
 			TypeHint:    params.TypeString,
-			Validator:   params.ValidateNonEmptyString,
+			IsMandatory: true,
 		},
 	}
 }

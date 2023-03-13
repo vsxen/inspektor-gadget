@@ -54,6 +54,7 @@ listed in the following table:
 | `advise network-policy`  | U.U                     |                         |
 | `advise seccomp-profile` | (CO-RE only)            |                         |
 | `audit seccomp`          | 5.4 (CO-RE only)        | `KPROBES`               |
+| `bpftrace`               | 4.x                     |                         |
 | `profile block-io`       | 4.15 (BCC), U.U (CO-RE) |                         |
 | `profile cpu`            | (BCC only)              |                         |
 | `snapshot process`       | 5.10 (CO-RE only)       |                         |

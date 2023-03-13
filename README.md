@@ -56,6 +56,7 @@ Explore the following documentation to find out which tools can help you in your
 	- [`sni`](docs/gadgets/trace/sni.md)
 	- [`tcp`](docs/gadgets/trace/tcp.md)
 	- [`tcpconnect`](docs/gadgets/trace/tcpconnect.md)
+- [`bpftrace`](docs/gadgets/bpftrace.md)
 - [`traceloop`](docs/gadgets/traceloop.md)
 
 ## Installation
@@ -90,6 +91,7 @@ Usage:
 Available Commands:
   advise         Recommend system configurations based on collected information
   audit          Audit a subsystem
+  bpftrace       Run a bpftrace program
   completion     Generate the autocompletion script for the specified shell
   deploy         Deploy Inspektor Gadget on the cluster
   help           Help about any command
