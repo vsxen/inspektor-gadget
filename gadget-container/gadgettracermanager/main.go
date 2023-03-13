@@ -39,6 +39,9 @@ import (
 	gadgetservice "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-service"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgettracermanager"
 	pb "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgettracermanager/api"
+
+	// TODO: remove once we import all-gadgets
+	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/bpftrace"
 )
 
 var (
