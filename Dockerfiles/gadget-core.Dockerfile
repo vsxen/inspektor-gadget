@@ -6,7 +6,7 @@
 # (CONFIG_DEBUG_INFO_BTF).
 
 ARG BUILDER_IMAGE=debian:bullseye
-ARG BASE_IMAGE=alpine:3.14
+ARG BASE_IMAGE=busybox:glibc
 
 # Prepare and build gadget artifacts in a container
 FROM --platform=${BUILDPLATFORM} ${BUILDER_IMAGE} as builder
@@ -42,25 +42,17 @@ RUN cd /gadget/gadget-container && \
 # Main gadget image
 FROM ${BASE_IMAGE}
 
-# install runtime dependencies  according to the package manager
-# available on the base image
 RUN set -ex; \
-	if command -v tdnf; then \
-		tdnf install -y libseccomp wget util-linux; \
-	elif command -v yum; then \
-		yum install -y libseccomp wget util-linux; \
-	elif command -v apt-get; then \
-		apt-get update && \
-		apt-get install -y seccomp wget util-linux; \
-	elif command -v apk; then \
-		apk add gcompat libseccomp wget util-linux; \
-	fi && \
 	(rmdir /usr/src || true) && ln -sf /host/usr/src /usr/src && \
 	rm -f /etc/localtime && ln -sf /host/etc/localtime /etc/localtime
 
 COPY gadget-container/entrypoint.sh gadget-container/cleanup.sh /
 
 COPY --from=builder /gadget/gadget-container/bin/gadgettracermanager /bin/
+
+# We need to copy libseccomp.so and libdl.so from builder image as
+# gadgettracermanager relies on them.
+COPY --from=builder /usr/lib/x86_64-linux-gnu/libseccomp.so.2 /lib/x86_64-linux-gnu/libdl.so.2 /lib
 
 ## Hooks Begins
 
