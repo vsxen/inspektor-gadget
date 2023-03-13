@@ -48,6 +48,7 @@ var (
 
 	// image such as ghcr.io/inspektor-gadget/inspektor-gadget:latest
 	image          = flag.String("image", "", "gadget container image")
+	imageFlavour   = flag.String("image-flavour", "default", "gadget container image flavour (e.g. 'core' or 'default')")
 	dnsTesterImage = flag.String("dnstester-image", "ghcr.io/inspektor-gadget/dnstester:latest", "dnstester container image")
 
 	doNotDeployIG  = flag.Bool("no-deploy-ig", false, "don't deploy Inspektor Gadget")
