@@ -227,7 +227,7 @@ func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 	return tracer, nil
 }
 
-func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
+func (t *Tracer) init(gadgetCtx gadgets.GadgetContext) error {
 	params := gadgetCtx.GadgetParams()
 	t.protocols = params.Get(ParamProto).AsString()
 	return nil
@@ -253,7 +253,12 @@ func (t *Tracer) SetEventHandlerArray(handler any) {
 	t.eventHandler = nh
 }
 
-func (t *Tracer) Run() error {
+func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
+	// TODO: Use context to cancel the collector
+	if err := t.init(gadgetCtx); err != nil {
+		return fmt.Errorf("initializing tracer: %w", err)
+	}
+
 	allSockets := []*socketcollectortypes.Event{}
 
 	for netns, pid := range t.visitedNamespaces {

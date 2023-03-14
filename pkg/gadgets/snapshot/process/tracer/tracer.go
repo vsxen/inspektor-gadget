@@ -271,7 +271,7 @@ func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 	return tracer, nil
 }
 
-func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
+func (t *Tracer) init(gadgetCtx gadgets.GadgetContext) error {
 	params := gadgetCtx.GadgetParams()
 	t.config.ShowThreads = params.Get(ParamThreads).AsBool()
 	return nil
@@ -289,10 +289,15 @@ func (t *Tracer) SetMountNsMap(mntnsMap *ebpf.Map) {
 	t.config.MountnsMap = mntnsMap
 }
 
-func (t *Tracer) Run() error {
+func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
+	// TODO: Use context to cancel the collector
+	if err := t.init(gadgetCtx); err != nil {
+		return fmt.Errorf("initializing tracer: %w", err)
+	}
+
 	processes, err := RunCollector(t.config, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("running collector: %w", err)
 	}
 	t.eventHandler(processes)
 	return nil
