@@ -17,7 +17,6 @@
 package tracer
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"unsafe"
@@ -63,7 +62,8 @@ func NewTracer(config *Config, enricher gadgets.DataEnricherByMntNs,
 		return nil, err
 	}
 
-	go t.run()
+	// This still needs to be handled.
+	//go t.run()
 
 	return t, nil
 }
@@ -131,61 +131,65 @@ func (t *Tracer) install() error {
 	return nil
 }
 
-func (t *Tracer) run() {
+type recorderr struct {
+	record perf.Record
+	err    error
+}
+
+func (t *Tracer) poll(c chan recorderr) {
 	for {
 		record, err := t.reader.Read()
+		c <- recorderr{
+			record: record,
+			err:    err,
+		}
 		if err != nil {
-			if errors.Is(err, perf.ErrClosed) {
-				// nothing to do, we're done
-				return
-			}
-
-			msg := fmt.Sprintf("Error reading perf ring buffer: %s", err)
-			t.eventCallback(types.Base(eventtypes.Err(msg)))
 			return
 		}
-
-		if record.LostSamples > 0 {
-			msg := fmt.Sprintf("lost %d samples", record.LostSamples)
-			t.eventCallback(types.Base(eventtypes.Warn(msg)))
-			continue
-		}
-
-		bpfEvent := (*execsnoopEvent)(unsafe.Pointer(&record.RawSample[0]))
-
-		event := types.Event{
-			Event: eventtypes.Event{
-				Type:      eventtypes.NORMAL,
-				Timestamp: gadgets.WallTimeFromBootTime(bpfEvent.Timestamp),
-			},
-			Pid:           bpfEvent.Pid,
-			Ppid:          bpfEvent.Ppid,
-			UID:           bpfEvent.Uid,
-			WithMountNsID: eventtypes.WithMountNsID{MountNsID: bpfEvent.MntnsId},
-			Retval:        int(bpfEvent.Retval),
-			Comm:          gadgets.FromCString(bpfEvent.Comm[:]),
-		}
-
-		argsCount := 0
-		buf := []byte{}
-
-		for i := 0; i < int(bpfEvent.ArgsSize) && argsCount < int(bpfEvent.ArgsCount); i++ {
-			c := bpfEvent.Args[i]
-			if c == 0 {
-				event.Args = append(event.Args, string(buf))
-				argsCount = 0
-				buf = []byte{}
-			} else {
-				buf = append(buf, c)
-			}
-		}
-
-		if t.enricher != nil {
-			t.enricher.EnrichByMntNs(&event.CommonData, event.MountNsID)
-		}
-
-		t.eventCallback(&event)
 	}
+}
+
+func (t *Tracer) process(record perf.Record) {
+	if record.LostSamples > 0 {
+		msg := fmt.Sprintf("lost %d samples", record.LostSamples)
+		t.eventCallback(types.Base(eventtypes.Warn(msg)))
+		return
+	}
+
+	bpfEvent := (*execsnoopEvent)(unsafe.Pointer(&record.RawSample[0]))
+
+	event := types.Event{
+		Event: eventtypes.Event{
+			Type:      eventtypes.NORMAL,
+			Timestamp: gadgets.WallTimeFromBootTime(bpfEvent.Timestamp),
+		},
+		Pid:           bpfEvent.Pid,
+		Ppid:          bpfEvent.Ppid,
+		UID:           bpfEvent.Uid,
+		WithMountNsID: eventtypes.WithMountNsID{MountNsID: bpfEvent.MntnsId},
+		Retval:        int(bpfEvent.Retval),
+		Comm:          gadgets.FromCString(bpfEvent.Comm[:]),
+	}
+
+	argsCount := 0
+	buf := []byte{}
+
+	for i := 0; i < int(bpfEvent.ArgsSize) && argsCount < int(bpfEvent.ArgsCount); i++ {
+		c := bpfEvent.Args[i]
+		if c == 0 {
+			event.Args = append(event.Args, string(buf))
+			argsCount = 0
+			buf = []byte{}
+		} else {
+			buf = append(buf, c)
+		}
+	}
+
+	if t.enricher != nil {
+		t.enricher.EnrichByMntNs(&event.CommonData, event.MountNsID)
+	}
+
+	t.eventCallback(&event)
 }
 
 // --- Registry changes
@@ -203,10 +207,22 @@ func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 	ctx, cancel := gadgetcontext.WithTimeout(gadgetCtx.Context(), gadgetCtx.Timeout())
 	defer cancel()
 
-	go t.run()
-	<-ctx.Done()
+	c := make(chan recorderr)
+	go t.poll(c)
 
-	return nil
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case r := <-c:
+			// If there is an error while polling we can report it
+			if r.err != nil {
+				return r.err
+			}
+
+			t.process(r.record)
+		}
+	}
 }
 
 func (t *Tracer) SetMountNsMap(mountnsMap *ebpf.Map) {
