@@ -88,6 +88,13 @@ func (t *Trace) Collect(trace *gadgetv1alpha1.Trace) {
 	// we only need to run the tracer with one valid PID per namespace/pod
 	visitedPods := make(map[string]struct{})
 
+	socketTracer, err := tracer.NewTracer()
+	if err != nil {
+		trace.Status.OperationError = err.Error()
+		return
+	}
+	defer socketTracer.CloseIters()
+
 	for _, container := range filteredContainers {
 		key := container.Namespace + "/" + container.Podname
 		if _, ok := visitedPods[key]; !ok {
@@ -118,7 +125,7 @@ func (t *Trace) Collect(trace *gadgetv1alpha1.Trace) {
 				}
 			}
 
-			podSockets, err := tracer.RunCollector(container.Pid, container.Podname,
+			podSockets, err := socketTracer.RunCollector(container.Pid, container.Podname,
 				container.Namespace, trace.Spec.Node, protocol)
 			if err != nil {
 				trace.Status.OperationError = err.Error()

@@ -35,6 +35,18 @@ import (
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target bpfel -cc clang iterTCPv4 ./bpf/tcp4-collector.c -- -I../../../../${TARGET} -Werror -O2 -g -c -x c
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target bpfel -cc clang iterUDPv4 ./bpf/udp4-collector.c -- -I../../../../${TARGET} -Werror -O2 -g -c -x c
 
+type Tracer struct {
+	iters map[socketcollectortypes.Proto]*link.Iter
+
+	// visitedNamespaces is a map where the key is the netns inode number and
+	// the value is the pid of one of the containers that share that netns. Such
+	// pid is used by NetnsEnter. TODO: Improve NetnsEnter to also work with the
+	// netns directly.
+	visitedNamespaces map[uint64]uint32
+	protocols         socketcollectortypes.Proto
+	eventHandler      func([]*socketcollectortypes.Event)
+}
+
 func parseIPv4(ipU32 uint32) string {
 	ipBytes := make([]byte, 4)
 
@@ -109,36 +121,28 @@ func getUDPIter() (*link.Iter, error) {
 	return it, nil
 }
 
-func RunCollector(pid uint32, podname, namespace, node string, proto socketcollectortypes.Proto) ([]*socketcollectortypes.Event, error) {
+func (t *Tracer) RunCollector(pid uint32, podname, namespace, node string, proto socketcollectortypes.Proto) ([]*socketcollectortypes.Event, error) {
 	var err error
-	var it *link.Iter
-	iters := []*link.Iter{}
 
-	defer func() {
-		for _, it := range iters {
-			it.Close()
-		}
-	}()
-
-	if proto == socketcollectortypes.TCP || proto == socketcollectortypes.ALL {
-		it, err = getTCPIter()
-		if err != nil {
-			return nil, err
-		}
-		iters = append(iters, it)
+	if proto == socketcollectortypes.INVALID {
+		proto = socketcollectortypes.ALL
 	}
 
-	if proto == socketcollectortypes.UDP || proto == socketcollectortypes.ALL {
-		it, err = getUDPIter()
+	// TODO: remove this once PR#1408 is completed: openIters() will be done by Run()
+	if len(t.iters) == 0 {
+		err := t.openIters()
 		if err != nil {
 			return nil, err
 		}
-		iters = append(iters, it)
 	}
 
 	sockets := []*socketcollectortypes.Event{}
 	err = netnsenter.NetnsEnter(int(pid), func() error {
-		for _, it := range iters {
+		for iterKey, it := range t.iters {
+			if proto != socketcollectortypes.ALL && proto != iterKey {
+				continue
+			}
+
 			reader, err := it.Open()
 			if err != nil {
 				return fmt.Errorf("failed to open BPF iterator: %w", err)
@@ -210,26 +214,29 @@ func RunCollector(pid uint32, podname, namespace, node string, proto socketcolle
 
 // ---
 
-type Tracer struct {
-	// visitedNamespaces is a map where the key is the netns inode number and
-	// the value is the pid of one of the containers that share that netns. Such
-	// pid is used by NetnsEnter. TODO: Improve NetnsEnter to also work with the
-	// netns directly.
-	visitedNamespaces map[uint64]uint32
-	protocols         string
-	eventHandler      func([]*socketcollectortypes.Event)
-}
-
-func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
+func NewTracer() (*Tracer, error) {
 	tracer := &Tracer{
 		visitedNamespaces: make(map[uint64]uint32),
+		protocols:         socketcollectortypes.ALL,
+		iters:             make(map[socketcollectortypes.Proto]*link.Iter),
 	}
 	return tracer, nil
 }
 
+func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
+	return NewTracer()
+}
+
 func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
 	params := gadgetCtx.GadgetParams()
-	t.protocols = params.Get(ParamProto).AsString()
+	protocols := params.Get(ParamProto).AsString()
+
+	var ok bool
+	t.protocols, ok = socketcollectortypes.ProtocolsMap[protocols]
+	if !ok {
+		return fmt.Errorf("invalid proto %q", protocols)
+	}
+
 	return nil
 }
 
@@ -253,14 +260,51 @@ func (t *Tracer) SetEventHandlerArray(handler any) {
 	t.eventHandler = nh
 }
 
-func (t *Tracer) Run() error {
-	allSockets := []*socketcollectortypes.Event{}
+// CloseIters is currently exported so it can be called from Collect()
+// TODO: move this directly in Run() once PR#1408 is completed
+func (t *Tracer) CloseIters() {
+	for _, it := range t.iters {
+		it.Close()
+	}
+	t.iters = nil
+}
 
+func (t *Tracer) openIters() error {
+	var it *link.Iter
+	var err error
+
+	if t.protocols == socketcollectortypes.TCP || t.protocols == socketcollectortypes.ALL {
+		it, err = getTCPIter()
+		if err != nil {
+			return err
+		}
+		t.iters[socketcollectortypes.TCP] = it
+	}
+
+	if t.protocols == socketcollectortypes.UDP || t.protocols == socketcollectortypes.ALL {
+		it, err = getUDPIter()
+		if err != nil {
+			return err
+		}
+		t.iters[socketcollectortypes.UDP] = it
+	}
+
+	return nil
+}
+
+func (t *Tracer) Run() error {
+	err := t.openIters()
+	if err != nil {
+		return err
+	}
+	defer t.CloseIters()
+
+	allSockets := []*socketcollectortypes.Event{}
 	for netns, pid := range t.visitedNamespaces {
 		// TODO: Remove podname, namespace and node arguments from RunCollector.
 		// The enrichment will be done in the event handler. In addition, pass
 		// the netns to avoid retrieving it again in RunCollector.
-		sockets, err := RunCollector(pid, "", "", "", socketcollectortypes.ProtocolsMap[t.protocols])
+		sockets, err := t.RunCollector(pid, "", "", "", t.protocols)
 		if err != nil {
 			return fmt.Errorf("collecting sockets in netns %d: %w", netns, err)
 		}
