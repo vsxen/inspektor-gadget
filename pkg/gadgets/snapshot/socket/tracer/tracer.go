@@ -121,25 +121,13 @@ func getUDPIter() (*link.Iter, error) {
 	return it, nil
 }
 
-func (t *Tracer) RunCollector(pid uint32, podname, namespace, node string, proto socketcollectortypes.Proto) ([]*socketcollectortypes.Event, error) {
+func (t *Tracer) RunCollector(pid uint32, podname, namespace, node string) ([]*socketcollectortypes.Event, error) {
 	var err error
-
-	if proto == socketcollectortypes.INVALID {
-		proto = socketcollectortypes.ALL
-	}
-
-	// TODO: remove this once PR#1408 is completed: openIters() will be done by Run()
-	if len(t.iters) == 0 {
-		err := t.openIters()
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	sockets := []*socketcollectortypes.Event{}
 	err = netnsenter.NetnsEnter(int(pid), func() error {
 		for iterKey, it := range t.iters {
-			if proto != socketcollectortypes.ALL && proto != iterKey {
+			if t.protocols != socketcollectortypes.ALL && t.protocols != iterKey {
 				continue
 			}
 
@@ -214,28 +202,37 @@ func (t *Tracer) RunCollector(pid uint32, podname, namespace, node string, proto
 
 // ---
 
-func NewTracer() (*Tracer, error) {
+func NewTracer(protocols socketcollectortypes.Proto) (*Tracer, error) {
 	tracer := &Tracer{
 		visitedNamespaces: make(map[uint64]uint32),
-		protocols:         socketcollectortypes.ALL,
+		protocols:         protocols,
 		iters:             make(map[socketcollectortypes.Proto]*link.Iter),
 	}
+
+	if err := tracer.openIters(); err != nil {
+		tracer.CloseIters()
+		return nil, fmt.Errorf("installing tracer: %w", err)
+	}
+
 	return tracer, nil
 }
 
 func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
-	return NewTracer()
+	return &Tracer{
+		visitedNamespaces: make(map[uint64]uint32),
+		iters:             make(map[socketcollectortypes.Proto]*link.Iter),
+	}, nil
 }
 
 func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
 	params := gadgetCtx.GadgetParams()
-	protocols := params.Get(ParamProto).AsString()
-
-	var ok bool
-	t.protocols, ok = socketcollectortypes.ProtocolsMap[protocols]
-	if !ok {
-		return fmt.Errorf("invalid proto %q", protocols)
+	protoParam := params.Get(ParamProto)
+	protocols := protoParam.AsString()
+	if err := protoParam.Validate(protocols); err != nil {
+		return err
 	}
+
+	t.protocols, _ = socketcollectortypes.ProtocolsMap[protocols]
 
 	return nil
 }
@@ -293,18 +290,17 @@ func (t *Tracer) openIters() error {
 }
 
 func (t *Tracer) Run() error {
-	err := t.openIters()
-	if err != nil {
-		return err
-	}
 	defer t.CloseIters()
+	if err := t.openIters(); err != nil {
+		return fmt.Errorf("installing tracer: %w", err)
+	}
 
 	allSockets := []*socketcollectortypes.Event{}
 	for netns, pid := range t.visitedNamespaces {
 		// TODO: Remove podname, namespace and node arguments from RunCollector.
 		// The enrichment will be done in the event handler. In addition, pass
 		// the netns to avoid retrieving it again in RunCollector.
-		sockets, err := t.RunCollector(pid, "", "", "", t.protocols)
+		sockets, err := t.RunCollector(pid, "", "", "")
 		if err != nil {
 			return fmt.Errorf("collecting sockets in netns %d: %w", netns, err)
 		}

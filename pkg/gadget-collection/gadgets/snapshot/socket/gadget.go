@@ -83,12 +83,24 @@ func (t *Trace) Collect(trace *gadgetv1alpha1.Trace) {
 
 	allSockets := []*socketcollectortypes.Event{}
 
+	protocol := socketcollectortypes.ALL
+	if trace.Spec.Parameters != nil {
+		if val, ok := trace.Spec.Parameters["protocol"]; ok {
+			var err error
+			protocol, err = socketcollectortypes.ParseProtocol(val)
+			if err != nil {
+				trace.Status.OperationError = err.Error()
+				return
+			}
+		}
+	}
+
 	// Given that the socket-collector tracer works per network namespace and
 	// all the containers inside a namespace/pod share the network namespace,
 	// we only need to run the tracer with one valid PID per namespace/pod
 	visitedPods := make(map[string]struct{})
 
-	socketTracer, err := tracer.NewTracer()
+	socketTracer, err := tracer.NewTracer(protocol)
 	if err != nil {
 		trace.Status.OperationError = err.Error()
 		return
@@ -112,21 +124,8 @@ func (t *Trace) Collect(trace *gadgetv1alpha1.Trace) {
 			log.Debugf("Gadget %s: Using PID %d to retrieve network namespace of Pod %q in Namespace %q",
 				trace.Spec.Gadget, container.Pid, container.Podname, container.Namespace)
 
-			protocol := socketcollectortypes.ALL
-
-			if trace.Spec.Parameters != nil {
-				if val, ok := trace.Spec.Parameters["protocol"]; ok {
-					var err error
-					protocol, err = socketcollectortypes.ParseProtocol(val)
-					if err != nil {
-						trace.Status.OperationError = err.Error()
-						return
-					}
-				}
-			}
-
 			podSockets, err := socketTracer.RunCollector(container.Pid, container.Podname,
-				container.Namespace, trace.Spec.Node, protocol)
+				container.Namespace, trace.Spec.Node)
 			if err != nil {
 				trace.Status.OperationError = err.Error()
 				return
