@@ -49,12 +49,12 @@ func AddCommandsFromRegistry(rootCmd *cobra.Command, runtime runtime.Runtime, co
 	lookup := make(map[string]*cobra.Command)
 
 	// Add global runtime flags
-	addFlags(rootCmd, runtimeGlobalParams)
+	addFlags(runtime, rootCmd, runtimeGlobalParams, nil)
 
 	// Add operator global flags
 	operatorsGlobalParamsCollection := operators.GlobalParamsCollection()
 	for _, operatorParams := range operatorsGlobalParamsCollection {
-		addFlags(rootCmd, operatorParams)
+		addFlags(runtime, rootCmd, operatorParams, nil)
 	}
 
 	// Add all known gadgets to cobra in their respective categories
@@ -132,6 +132,11 @@ func buildCommandFromGadget(
 	var filters []string
 	var timeout int
 
+	var skipParams []params.ValueHint
+	if skipParamsInterface, ok := gadgetDesc.(gadgets.GadgetDescSkipParams); ok {
+		skipParams = skipParamsInterface.SkipParams()
+	}
+
 	outputFormats := gadgets.OutputFormats{}
 	defaultOutputFormat := ""
 
@@ -147,7 +152,7 @@ func buildCommandFromGadget(
 	// Instantiate gadget params - this is important, because the params get filled out by cobra
 	gadgetParams := gadgetDesc.ParamDescs().ToParams()
 
-	// Get per gadget operator params
+	// Get per gadget operators
 	validOperators := operators.GetOperatorsForGadget(gadgetDesc)
 
 	// TODO: Combine remote operator params with locally available ones
@@ -435,19 +440,28 @@ func buildCommandFromGadget(
 	gadgetParams.Add(*gadgets.GadgetParams(gadgetDesc, parser).ToParams()...)
 
 	// Add runtime flags
-	addFlags(cmd, runtimeParams)
+	addFlags(runtime, cmd, runtimeParams, skipParams)
 
 	// Add gadget flags
-	addFlags(cmd, gadgetParams)
+	addFlags(runtime, cmd, gadgetParams, skipParams)
 
 	// Add operator flags
 	for _, operatorParams := range operatorsParamsCollection {
-		addFlags(cmd, operatorParams)
+		addFlags(runtime, cmd, operatorParams, skipParams)
 	}
 	return cmd
 }
 
-func addFlags(cmd *cobra.Command, params *params.Params) {
+func mustSkip(skipParams []params.ValueHint, valueHint params.ValueHint) bool {
+	for _, param := range skipParams {
+		if param == valueHint {
+			return true
+		}
+	}
+	return false
+}
+
+func addFlags(runtime runtime.Runtime, cmd *cobra.Command, params *params.Params, skipParams []params.ValueHint) {
 	defer func() {
 		if err := recover(); err != nil {
 			panic(fmt.Sprintf("registering params for command %q: %v", cmd.Use, err))
@@ -455,6 +469,19 @@ func addFlags(cmd *cobra.Command, params *params.Params) {
 	}()
 	for _, p := range *params {
 		desc := p.Description
+
+		// If ValueHint is set, try to get a default value for that from the runtime
+		if p.ValueHint != "" {
+			if mustSkip(skipParams, p.ValueHint) {
+				// don't expose this parameter
+				continue
+			}
+
+			// Try to get a value from the runtime
+			if value, hasValue := runtime.GetDefaultValue(p.ValueHint); hasValue {
+				p.Set(value)
+			}
+		}
 
 		if p.PossibleValues != nil {
 			desc += " [" + strings.Join(p.PossibleValues, ", ") + "]"

@@ -171,12 +171,12 @@ func GetTraceClient() (*clientset.Clientset, error) {
 func getTraceClient() (*clientset.Clientset, error) {
 	config, err := KubernetesConfigFlags.ToRESTConfig()
 	if err != nil {
-		return nil, fmt.Errorf("failed to creating RESTConfig: %w", err)
+		return nil, fmt.Errorf("creating RESTConfig: %w", err)
 	}
 
 	traceClient, err := clientset.NewForConfig(config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to set up trace client: %w", err)
+		return nil, fmt.Errorf("setting up trace client: %w", err)
 	}
 
 	return traceClient, err

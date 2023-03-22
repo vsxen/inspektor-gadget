@@ -70,16 +70,19 @@ func (k *KubeManager) ParamDescs() params.ParamDescs {
 			Key:         ParamContainerName,
 			Alias:       "c",
 			Description: "Show only data from containers with that name",
+			ValueHint:   gadgets.K8SContainerName,
 		},
 		{
 			Key:         ParamSelector,
 			Alias:       "l",
 			Description: "Labels selector to filter on. Only '=' is supported (e.g. key1=value1,key2=value2).",
+			ValueHint:   gadgets.K8SLabels,
 		},
 		{
 			Key:         ParamPodName,
 			Alias:       "p",
 			Description: "Show only data from pods with that name",
+			ValueHint:   gadgets.K8SPodName,
 		},
 		{
 			Key:          ParamAllNamespaces,
@@ -92,6 +95,7 @@ func (k *KubeManager) ParamDescs() params.ParamDescs {
 			Key:         ParamNamespace,
 			Alias:       "n",
 			Description: "Show only data from pods in a given namespace",
+			ValueHint:   gadgets.K8SNamespace,
 		},
 	}
 }
@@ -181,6 +185,10 @@ func (m *KubeManagerInstance) PreGadgetRun() error {
 		Namespace: m.params.Get(ParamNamespace).AsString(),
 		Podname:   m.params.Get(ParamPodName).AsString(),
 		Name:      m.params.Get(ParamContainerName).AsString(),
+	}
+
+	if m.params.Get(ParamAllNamespaces).AsBool() {
+		containerSelector.Namespace = ""
 	}
 
 	if setter, ok := m.tracer.(MountNsMapSetter); ok {

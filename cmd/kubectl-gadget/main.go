@@ -24,6 +24,7 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/kubectl-gadget/utils"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/columns"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/environment"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	grpcruntime "github.com/inspektor-gadget/inspektor-gadget/pkg/runtime/grpc"
 
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/all-gadgets"
@@ -43,6 +44,9 @@ func init() {
 
 func main() {
 	runtime := grpcruntime.New()
+
+	namespace, _ := utils.GetNamespace()
+	runtime.SetDefaultValue(gadgets.K8SNamespace, namespace)
 
 	// columnFilters for kubectl-gadget
 	columnFilters := []columns.ColumnFilter{columns.Or(columns.WithTag("kubernetes"), columns.WithNoTags())}
