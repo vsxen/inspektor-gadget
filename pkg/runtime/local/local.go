@@ -154,3 +154,11 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (map[string][]byte,
 func (r *Runtime) GetCatalog() (*runtime.Catalog, error) {
 	return r.catalog, nil
 }
+
+func (r *Runtime) SetDefaultValue(key, value string) {
+	panic("not supported, yet")
+}
+
+func (r *Runtime) GetDefaultValue(key string) (string, bool) {
+	return "", false
+}

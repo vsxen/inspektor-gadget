@@ -44,6 +44,9 @@ func init() {
 func main() {
 	runtime := grpcruntime.New()
 
+	namespace, _ := utils.GetNamespace()
+	runtime.SetDefaultValue("namespace", namespace)
+
 	// columnFilters for kubectl-gadget
 	columnFilters := []columns.ColumnFilter{columns.Or(columns.WithTag("kubernetes"), columns.WithNoTags())}
 	common.AddCommandsFromRegistry(rootCmd, runtime, columnFilters)

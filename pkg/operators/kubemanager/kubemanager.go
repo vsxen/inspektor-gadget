@@ -89,9 +89,10 @@ func (k *KubeManager) ParamDescs() params.ParamDescs {
 			DefaultValue: "false",
 		},
 		{
-			Key:         ParamNamespace,
-			Alias:       "n",
-			Description: "Show only data from pods in a given namespace",
+			Key:          ParamNamespace,
+			Alias:        "n",
+			DefaultValue: "!namespace", // This will be replaced by the registry.go using the runtime
+			Description:  "Show only data from pods in a given namespace",
 		},
 	}
 }
@@ -181,6 +182,10 @@ func (m *KubeManagerInstance) PreGadgetRun() error {
 		Namespace: m.params.Get(ParamNamespace).AsString(),
 		Podname:   m.params.Get(ParamPodName).AsString(),
 		Name:      m.params.Get(ParamContainerName).AsString(),
+	}
+
+	if m.params.Get(ParamAllNamespaces).AsBool() {
+		containerSelector.Namespace = ""
 	}
 
 	if setter, ok := m.tracer.(MountNsMapSetter); ok {

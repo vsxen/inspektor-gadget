@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,14 +50,17 @@ const (
 )
 
 type Runtime struct {
-	catalog *runtime.Catalog
+	catalog       *runtime.Catalog
+	defaultValues map[string]string
 }
 
 // New instantiates the runtime and loads the locally stored gadget catalog. If no catalog is stored locally,
 // it will try to fetch one from one of the gadget nodes and store it locally. It will issue warnings on
 // failures.
 func New() *Runtime {
-	r := &Runtime{}
+	r := &Runtime{
+		defaultValues: map[string]string{},
+	}
 
 	// Initialize Catalog
 	catalog, err := loadLocalGadgetCatalog()
@@ -338,4 +342,13 @@ func (r *Runtime) runGadget(gadgetCtx runtime.GadgetContext, pod gadgetPod) ([]b
 
 func (r *Runtime) GetCatalog() (*runtime.Catalog, error) {
 	return r.catalog, nil
+}
+
+func (r *Runtime) SetDefaultValue(key, value string) {
+	r.defaultValues[strings.ToLower(key)] = value
+}
+
+func (r *Runtime) GetDefaultValue(key string) (string, bool) {
+	val, ok := r.defaultValues[strings.ToLower(key)]
+	return val, ok
 }

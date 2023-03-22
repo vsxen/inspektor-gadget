@@ -49,12 +49,12 @@ func AddCommandsFromRegistry(rootCmd *cobra.Command, runtime runtime.Runtime, co
 	lookup := make(map[string]*cobra.Command)
 
 	// Add global runtime flags
-	addFlags(rootCmd, runtimeGlobalParams)
+	addFlags(runtime, rootCmd, runtimeGlobalParams)
 
 	// Add operator global flags
 	operatorsGlobalParamsCollection := operators.GlobalParamsCollection()
 	for _, operatorParams := range operatorsGlobalParamsCollection {
-		addFlags(rootCmd, operatorParams)
+		addFlags(runtime, rootCmd, operatorParams)
 	}
 
 	// Add all known gadgets to cobra in their respective categories
@@ -435,19 +435,19 @@ func buildCommandFromGadget(
 	gadgetParams.Add(*gadgets.GadgetParams(gadgetDesc, parser).ToParams()...)
 
 	// Add runtime flags
-	addFlags(cmd, runtimeParams)
+	addFlags(runtime, cmd, runtimeParams)
 
 	// Add gadget flags
-	addFlags(cmd, gadgetParams)
+	addFlags(runtime, cmd, gadgetParams)
 
 	// Add operator flags
 	for _, operatorParams := range operatorsParamsCollection {
-		addFlags(cmd, operatorParams)
+		addFlags(runtime, cmd, operatorParams)
 	}
 	return cmd
 }
 
-func addFlags(cmd *cobra.Command, params *params.Params) {
+func addFlags(runtime runtime.Runtime, cmd *cobra.Command, params *params.Params) {
 	defer func() {
 		if err := recover(); err != nil {
 			panic(fmt.Sprintf("registering params for command %q: %v", cmd.Use, err))
@@ -455,6 +455,15 @@ func addFlags(cmd *cobra.Command, params *params.Params) {
 	}()
 	for _, p := range *params {
 		desc := p.Description
+
+		// Special case: if a DefaultValue starts with an exclamation mark, we
+		// look up the default value in the runtime
+		if strings.HasPrefix(p.DefaultValue, "!") {
+			// Try to get a value from the runtime
+			if value, hasValue := runtime.GetDefaultValue(strings.TrimPrefix(p.DefaultValue, "!")); hasValue {
+				p.Set(value)
+			}
+		}
 
 		if p.PossibleValues != nil {
 			desc += " [" + strings.Join(p.PossibleValues, ", ") + "]"
