@@ -15,6 +15,9 @@
 package kubemanager
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/cilium/ebpf"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
@@ -75,6 +78,21 @@ func (k *KubeManager) ParamDescs() params.ParamDescs {
 			Key:         ParamSelector,
 			Alias:       "l",
 			Description: "Labels selector to filter on. Only '=' is supported (e.g. key1=value1,key2=value2).",
+			Validator: func(value string) error {
+				if value == "" {
+					return nil
+				}
+
+				pairs := strings.Split(value, ",")
+				for _, pair := range pairs {
+					kv := strings.Split(pair, "=")
+					if len(kv) != 2 {
+						return fmt.Errorf("should be a comma-separated list of key-value pairs (key=value[,key=value,...])")
+					}
+				}
+
+				return nil
+			},
 		},
 		{
 			Key:         ParamPodName,
@@ -178,10 +196,18 @@ func (m *KubeManagerInstance) Name() string {
 func (m *KubeManagerInstance) PreGadgetRun() error {
 	log := m.gadgetCtx.Logger()
 
+	labels := make(map[string]string)
+	selectorSlice := m.params.Get(ParamSelector).AsStringSlice()
+	for _, pair := range selectorSlice {
+		kv := strings.Split(pair, "=")
+		labels[kv[0]] = kv[1]
+	}
+
 	containerSelector := containercollection.ContainerSelector{
 		Namespace: m.params.Get(ParamNamespace).AsString(),
 		Podname:   m.params.Get(ParamPodName).AsString(),
 		Name:      m.params.Get(ParamContainerName).AsString(),
+		Labels:    labels,
 	}
 
 	if m.params.Get(ParamAllNamespaces).AsBool() {
