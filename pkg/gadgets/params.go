@@ -23,7 +23,7 @@ import (
 
 const (
 	ParamInterval = "interval"
-	ParamSortBy   = "sort-by"
+	ParamSortBy   = "sort"
 	ParamMaxRows  = "max-rows"
 )
 
