@@ -194,6 +194,11 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (map[string][]byte,
 		)
 	}
 
+	if gadgetCtx.GadgetDesc().Type() == gadgets.TypeOneShot {
+		gadgetCtx.Parser().EnableCombiner()
+		defer gadgetCtx.Parser().Flush()
+	}
+
 	results := make(map[string][]byte)
 	var resultsLock sync.Mutex
 
