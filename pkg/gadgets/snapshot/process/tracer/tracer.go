@@ -112,7 +112,7 @@ func runeBPFCollector(config *Config, enricher gadgets.DataEnricherByMntNs) ([]*
 	}
 	defer file.Close()
 
-	var events []*processcollectortypes.Event
+	events := []*processcollectortypes.Event{}
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -192,7 +192,7 @@ func getTidEvent(config *Config, enricher gadgets.DataEnricherByMntNs, pid, tid 
 }
 
 func getPidEvents(config *Config, enricher gadgets.DataEnricherByMntNs, pid int) ([]*processcollectortypes.Event, error) {
-	var events []*processcollectortypes.Event
+	events := []*processcollectortypes.Event{}
 
 	items, err := os.ReadDir(filepath.Join(hostRoot, fmt.Sprintf("/proc/%d/task/", pid)))
 	if err != nil {
