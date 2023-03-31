@@ -103,6 +103,10 @@ type ContainerInfoSetters interface {
 	SetNode(string)
 }
 
+type NodeSetter interface {
+	SetNode(string)
+}
+
 type ContainerInfoGetters interface {
 	GetNode() string
 	GetPod() string
