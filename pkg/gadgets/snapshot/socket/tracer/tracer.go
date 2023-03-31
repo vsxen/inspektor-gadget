@@ -276,9 +276,6 @@ func (t *Tracer) openIters() error {
 func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 	protoParam := gadgetCtx.GadgetParams().Get(ParamProto)
 	protocols := protoParam.AsString()
-	if err := protoParam.Validate(protocols); err != nil {
-		return err
-	}
 	t.protocols, _ = socketcollectortypes.ProtocolsMap[protocols]
 
 	defer t.CloseIters()
